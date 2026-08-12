@@ -48,10 +48,10 @@ ul.main li:hover .sub{opacity:1;visibility:visible;transform:none}
 .burger{display:none;background:none;border:0;cursor:pointer}
 
 /* ---------- hero ---------- */
-.hero{position:relative;overflow:hidden;background:var(--dark)}
-.hero img{width:100%;height:min(96vh,900px);object-fit:cover;object-position:center 62%;opacity:.92}
-.hero .cap{position:absolute;inset:auto 0 0 0;padding:48px var(--pad);background:linear-gradient(transparent,rgba(0,0,0,.65))}
-.hero h1{color:#fff;font-size:clamp(30px,5.4vw,64px);font-weight:700;letter-spacing:.04em;line-height:1.05;text-transform:uppercase;max-width:640px}
+.hero{display:grid;grid-template-columns:minmax(0,46fr) minmax(0,54fr);background:var(--dark);overflow:hidden}
+.hero img{width:100%;height:min(88vh,820px);object-fit:cover;object-position:center 32%}
+.hero .cap{display:flex;flex-direction:column;justify-content:center;padding:56px var(--pad)}
+.hero h1{color:#fff;font-size:clamp(30px,4.4vw,58px);font-weight:700;letter-spacing:.04em;line-height:1.05;text-transform:uppercase}
 .hero p{color:rgba(255,255,255,.78);margin-top:12px;letter-spacing:.14em;font-size:12px;text-transform:uppercase}
 .btn{display:inline-block;margin-top:22px;background:#fff;color:var(--ink);padding:14px 40px;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;transition:.25s}
 .btn:hover{background:var(--ink);color:#fff}
@@ -99,6 +99,9 @@ footer a:hover{color:#fff}
   :root{--pad:24px}
   .g3{grid-template-columns:repeat(2,1fr)}
   .g4{grid-template-columns:repeat(2,1fr)}
+  .hero{grid-template-columns:1fr}
+  .hero img{height:auto;aspect-ratio:1/1;order:-1}
+  .hero .cap{padding:38px var(--pad) 46px}
   ul.main,.tools .lang{display:none}
   .burger{display:block}
   .logo{margin-right:auto}
@@ -153,12 +156,12 @@ footer a:hover{color:#fff}
 </header>
 
 <div class="hero">
-  <img src="https://smaker.vn/upload/photo/1-8691.jpg" alt="Smaker collection">
   <div class="cap">
     <h1>New Season<br>Drop 2026</h1>
     <p>Jersey · Waffle Tee · Velvet Jacket</p>
     <a href="#featured" class="btn">Shop now</a>
   </div>
+  <img src="https://smaker.vn/upload/photo/1-8691.jpg" alt="Smaker collection">
 </div>
 
 <section id="featured">
