@@ -204,6 +204,37 @@ section{position:relative}
 #heroCrosses{position:absolute;bottom:52px;left:0;width:100%;height:14px;
   color:var(--ink-25);pointer-events:none}
 
+/* ============ SCROLL RAIL (right edge) ============ */
+#rail{position:fixed;right:16px;top:50%;height:60vh;z-index:115;
+  transform:translateY(-50%) scaleY(0);transform-origin:50% 50%;
+  transition:transform .9s var(--e-out)}
+#rail.on{transform:translateY(-50%) scaleY(1)}
+#railTrack{position:relative;width:2px;height:100%;background:rgba(0,0,0,.1);margin:0 auto}
+#railFill{position:absolute;left:0;top:0;width:100%;height:100%;background:var(--accent);
+  transform:scaleY(0);transform-origin:50% 0;will-change:transform}
+#railDot{position:absolute;left:50%;top:0;width:4px;height:4px;border-radius:50%;
+  background:var(--accent);will-change:transform}
+/* padding gives a clickable hit area; background-clip keeps the dash 1px tall */
+.rtick{position:absolute;right:6px;width:6px;height:1px;padding:7px 0;cursor:pointer;
+  background:rgba(10,10,10,.25);background-clip:content-box;
+  transition:width .3s var(--e-out),background-color .3s}
+.rtick.act{width:12px;background-color:var(--accent)}
+#railLabel{position:absolute;right:22px;top:0;white-space:nowrap;font-size:9px;
+  color:var(--ink-50);opacity:0;transition:opacity .3s;pointer-events:none;
+  transform:translateY(-50%)}
+#rail:hover #railLabel{opacity:1}
+
+/* ============ GUIDE LINES + WAYPOINT CROSSES ============ */
+.gline{position:relative;height:11px;margin-bottom:44px}
+.gl-bar{position:absolute;left:0;top:50%;width:100%;height:1px;background:var(--ink-25);
+  transform:scaleX(0);transform-origin:0 50%;will-change:transform}
+.gline .cross{transform:translate(-50%,-50%) scale(0);
+  transition:transform .18s cubic-bezier(.34,1.6,.64,1)}
+.gline .cross.on{transform:translate(-50%,-50%) scale(1)}
+#endBar{position:relative;width:100%;height:4px;background:rgba(10,10,10,.12);margin-bottom:16px}
+#endBarFill{position:absolute;inset:0;background:var(--accent);
+  transform:scaleX(0);transform-origin:0 0;will-change:transform}
+
 /* ============ SCROLL-MORPH REEL THUMB ============ */
 #reelThumbSlot{width:24vw;aspect-ratio:16/9;margin:-6em 0 70px auto;pointer-events:none}
 #reelZone{position:relative;width:100%;aspect-ratio:16/9;margin-bottom:4vh}
@@ -215,7 +246,13 @@ section{position:relative}
   background:repeating-linear-gradient(to bottom,rgba(0,0,0,.5) 0 1px,transparent 1px 3px)}
 #reelMorph .rm-lab{position:absolute;top:5%;left:4%;color:#fff;z-index:3}
 #reelMorph .rm-tc{position:absolute;bottom:5%;left:4%;color:#fff;z-index:3;mix-blend-mode:difference}
-#rmHud{position:absolute;inset:0;z-index:4;color:#fff;opacity:0;pointer-events:none}
+#rmHud{position:absolute;inset:0;z-index:4;color:#fff;opacity:0;pointer-events:none;
+  transform:scale(.96);transform-origin:50% 50%;
+  transition:opacity .28s var(--e-out),transform .45s cubic-bezier(.34,1.45,.64,1)}
+#rmHud.on{opacity:1;transform:scale(1)}
+/* GL draws the jelly gradient; the DOM wrapper keeps layout + HUD + click only */
+.hasgl #reelMorph{background:transparent}
+.hasgl #reelMorph .rm-grad,.hasgl #reelMorph .rm-scan{display:none}
 #rmHud .hud-top{position:absolute;top:5%;right:4%;display:flex;gap:26px}
 #rmHud .hud-crosses{position:absolute;left:4%;right:4%;bottom:16%;height:13px}
 #rmHud .hud-play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
@@ -311,6 +348,7 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
   .workhead{flex-direction:column;align-items:flex-start;gap:16px;margin-bottom:50px}
   .mq{font-size:5vw} #endNum{font-size:22vw} #preNum{font-size:26vw}
   #menu{grid-template-columns:1fr} #menuPrev{display:none} #badge{display:none}
+  #rail{display:none}
   #reelPanel{width:92vw}
 }
 
@@ -387,6 +425,11 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
   </div>
 </div>
 
+<div id="rail" aria-hidden="true">
+  <div id="railTrack"><span id="railFill"></span><span id="railDot"></span></div>
+  <div id="railLabel" class="mono"></div>
+</div>
+
 <div id="glwrap"></div>
 
 <main id="app">
@@ -446,6 +489,7 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
 
   <!-- WORK -->
   <section id="work" class="wrap" style="padding-bottom:10vh">
+    <div class="gline" data-gline></div>
     <div class="workhead rv">
       <h2 class="h2"><span class="line"><span class="line-in">Featured Work</span></span></h2>
       <div class="mono fade" style="--l:1;text-align:right;color:var(--ink-50)" data-scramble>
@@ -459,6 +503,7 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
 
   <!-- STATEMENT -->
   <section id="stmt" class="wrap" style="padding:18vh 0">
+    <div class="gline" data-gline></div>
     <h2 class="h2" id="stmtTxt" style="max-width:1200px">Where Creative Ideas Become Immersive Experiences</h2>
     <div class="cols rv">
       <p class="p fade" style="--l:0">We partner with ambitious teams to translate abstract concepts into
@@ -484,6 +529,7 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
 
   <!-- CTA -->
   <section id="cta" class="wrap rv">
+    <div class="gline" data-gline></div>
     <div class="mono fade" style="color:var(--ink-50)" data-scramble>Is your big idea ready to go wild?</div>
     <a href="mailto:hello@lusionclone.studio" id="ctaLink" class="rollhost fade" style="--l:1" data-mag>
       <span data-roll>Let's work together!</span><span class="ul"></span></a>
@@ -492,7 +538,7 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
   <div id="marq"><div id="marqTrack"></div></div>
 
   <!-- FOOTER -->
-  <footer class="rv">
+  <footer id="footer" class="rv">
     <div class="fgrid">
       <div class="fcol fade" style="--l:0"><h4 class="mono" data-scramble>Address</h4>
         <p>18 Halcyon Works<br>Bristol BS1 6QH<br>United Kingdom</p></div>
@@ -519,6 +565,8 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
     <div id="endSticky">
       <div id="endTxt">
         <span class="mono" data-scramble>Keep scrolling to learn more about us</span>
+        <div class="gline" data-gline style="width:320px;margin-bottom:14px"></div>
+        <div id="endBar"><span id="endBarFill"></span></div>
         <b class="mono">Next Page</b>
       </div>
       <div id="endNum">000</div>
@@ -534,6 +582,14 @@ footer{background:#f6f6f4;padding:110px var(--pad) 34px}
    ========================================================================= */
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>v<a?a:v>b?b:v;
+/* damped spring step -> [pos, vel]. k = stiffness (1/s^2), z = damping ratio. */
+function spr(x,v,t,k,z,dt){
+  const w=Math.sqrt(k);
+  v += (k*(t-x) - 2*z*w*v)*dt;
+  return [x+v*dt, v];
+}
+/* reel morph sim state (document space) */
+const RS={cx:0,cy:0,w:0,h:0,vx:0,vy:0,vw:0,vh:0,target:0,settled:false,init:false};
 const app=document.getElementById('app'), spacer=document.getElementById('spacer');
 
 /* GL stub declared FIRST: measure() runs before the module script and would
@@ -651,6 +707,37 @@ function crosses(host,n){
 crosses(document.getElementById('heroCrosses'),5);
 crosses(document.querySelector('#rmHud .hud-crosses'),4);
 
+/* =========================================================================
+   SCROLL RAIL + GUIDE LINES (built once, driven by the measured registry)
+   ========================================================================= */
+const SECTIONS=[['hero','Hero'],['about','Bold Ideas'],['work','Featured Work'],
+  ['stmt','Statement'],['kin','Tunnel'],['cta','Contact'],['footer','Footer'],['end','Next Page']];
+const rail=document.getElementById('rail'), railTrack=document.getElementById('railTrack'),
+      railFill=document.getElementById('railFill'), railDot=document.getElementById('railDot'),
+      railLabel=document.getElementById('railLabel');
+let R_secs=[], railAct=-1;
+const ticks=SECTIONS.map(([id,label])=>{
+  const t=document.createElement('span'); t.className='rtick';
+  t.dataset.id=id; t.title=label; railTrack.appendChild(t); return t;
+});
+railTrack.addEventListener('click',e=>{
+  const t=e.target.closest('.rtick'); if(!t) return;
+  const s=R_secs.find(s=>s.id===t.dataset.id); if(s) goTo(s.y);
+});
+
+const glines=[];
+document.querySelectorAll('[data-gline]').forEach(el=>{
+  const bar=document.createElement('span'); bar.className='gl-bar'; el.appendChild(bar);
+  const cr=[];
+  for(let i=0;i<5;i++){
+    const c=document.createElement('i'); c.className='cross';
+    c.style.left=(i*25)+'%'; c.style.top='50%'; el.appendChild(c);
+    cr.push({el:c, stop:i/4, on:false});
+  }
+  glines.push({el,bar,cr,y:0,p:0});
+});
+const endBarFill=document.getElementById('endBarFill');
+
 /* fake timecode for the reel thumb (setInterval: must run in throttled tabs too) */
 setInterval(()=>{
   const s=Math.floor(Date.now()/1000)%60, f=Math.floor(Date.now()/40)%25;
@@ -725,9 +812,22 @@ function measure(){
   R_thumb={x:ts.left,y:ts.top,w:ts.width,h:ts.height};
   R_zone ={x:tz.left,y:tz.top,w:tz.width,h:tz.height};
 
+  glines.forEach(g=>{ g.y=g.el.getBoundingClientRect().top; });
+  R_secs=SECTIONS.map(([id,label])=>{
+    const e=document.getElementById(id); if(!e) return null;
+    const r=e.getBoundingClientRect(); return {id,label,y:r.top,h:r.height,top:0};
+  }).filter(Boolean);
+
   app.style.transform=prev;
   docH=app.scrollHeight;
   spacer.style.height=docH+'px';
+
+  /* rail tick positions = true document offset normalized to scrollable height */
+  const span=Math.max(1,docH-vh);
+  R_secs.forEach((s,i)=>{ s.top=clamp(s.y/span,0,1)*100;
+    if(ticks[i]) ticks[i].style.top=s.top+'%'; });
+  railH=railTrack.offsetHeight||1;
+
   buildMarquee();
   if(GL.resize) GL.resize();
 }
@@ -863,7 +963,7 @@ function pageTransition(){
 const kinSticky=document.getElementById('kinSticky'), kinBlock=document.getElementById('kinBlock'),
       endSticky=document.getElementById('endSticky'), tunnelLabel=document.getElementById('tunnelLabel'),
       badge=document.getElementById('badge');
-let frame=0, marqX=0, heroVis=1, tunProg=0, morphP=0;
+let frame=0, marqX=0, heroVis=1, tunProg=0, morphP=0, lastNow=0, railP=0, railH=1;
 
 function raf(now){
   requestAnimationFrame(raf);
@@ -921,19 +1021,69 @@ function raf(now){
     }
   }
 
-  /* scroll-morph reel thumb: FLIP from measured thumb rect -> measured zone rect.
-     Base geometry is the BIG rect scaled DOWN, so the HUD renders at scale 1
-     when it's visible — no inverse-scale text tricks needed. */
+  /* ---- reel morph: two-state spring with hysteresis (jelly) ----
+     Scroll no longer scrubs position; it only flips a TARGET. The rect comes
+     from a spring sim, simulated in DOCUMENT space so the target is
+     scroll-independent — otherwise the spring would chase the scroll forever. */
   if(R_zone && R_thumb){
-    const centerLive=R_zone.y-smooth+R_zone.h/2;
-    const raw=clamp((vh*1.35-centerLive)/(vh*1.35-vh*0.5),0,1);
-    morphP=lerp(morphP,1-Math.pow(1-raw,3),.12);          // eased + lerped = physical
-    const s=lerp(R_thumb.w/R_zone.w,1,morphP);
-    const tx=lerp(R_thumb.x-R_zone.x,0,morphP), ty=lerp(R_thumb.y-R_zone.y,0,morphP);
-    reelMorph.style.transform=`translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(${s.toFixed(4)})`;
-    /* counter-scale the radius so it reads as a constant 24px at every size */
-    reelMorph.style.borderRadius=(24/s).toFixed(1)+'px';
-    rmHud.style.opacity=clamp((morphP-.8)/.2,0,1).toFixed(3);
+    const dt=Math.min(0.033,(now-lastNow)/1000)||0.016;
+    if(document.body.classList.contains('nogl')){
+      /* no WebGL: keep the v2 scroll-scrubbed FLIP so nothing breaks */
+      const centerLive=R_zone.y-smooth+R_zone.h/2;
+      const raw=clamp((vh*1.35-centerLive)/(vh*1.35-vh*0.5),0,1);
+      morphP=lerp(morphP,1-Math.pow(1-raw,3),.12);
+      const s=lerp(R_thumb.w/R_zone.w,1,morphP);
+      const tx=lerp(R_thumb.x-R_zone.x,0,morphP), ty=lerp(R_thumb.y-R_zone.y,0,morphP);
+      reelMorph.style.transform=`translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(${s.toFixed(4)})`;
+      reelMorph.style.borderRadius=(24/s).toFixed(1)+'px';
+      rmHud.classList.toggle('on',morphP>.9);
+    }else{
+      const centerLive=R_zone.y-smooth+R_zone.h/2;
+      const p=clamp((vh*1.35-centerLive)/(vh*1.35-vh*0.5),0,1);
+      const want = p>0.5 ? 1 : (p<0.35 ? 0 : RS.target);   // hysteresis, no flapping
+      if(want!==RS.target){ RS.target=want; RS.settled=false; RS.popped=false;
+        rmHud.classList.remove('on'); }
+
+      const T = RS.target ? R_zone : R_thumb;
+      const tcx=T.x+T.w/2, tcy=T.y+T.h/2;                  // doc space
+      if(!RS.init){ RS.init=true; RS.cx=tcx;RS.cy=tcy;RS.w=T.w;RS.h=T.h; }
+
+      const nd=(Math.hypot(RS.cx-tcx,RS.cy-tcy)+Math.abs(RS.w-T.w))/Math.max(1,T.w);
+      /* DECISIVE ARRIVAL: inside 0.15 the springs stiffen x3 and damp harder,
+         so the flight ends in one small overshoot then a firm settle. */
+      const near=nd<0.15;
+      const kp=near?330:110, zp=near?0.9:0.72;
+      const ks=near?270:90,  zs=near?0.70:0.68;
+      /* THE POP. Stiffening alone cannot overshoot: k x3 raises w (peak ~ v/w)
+         and higher z damps — measured 0.00% at z=0.9 and 0.54% at z=0.7, both
+         read as a rigid scale. So kick the size springs once on arrival and let
+         the stiff spring absorb it: exactly one 3-4% overshoot, then firm.
+         ponytail: 2.4 calibrated on the measured response (0.75 -> 1.22%,
+         3.2 -> 4.9%; linear, so 2.4 -> ~3.6%). Retune if k/z above change. */
+      if(near && !RS.popped){
+        RS.popped=true;
+        const dir=Math.sign(T.w-RS.w)||1;
+        RS.vw+=dir*T.w*2.4; RS.vh+=dir*T.h*2.4;
+      }
+      let o;
+      o=spr(RS.cx,RS.vx,tcx,kp,zp,dt); RS.cx=o[0]; RS.vx=o[1];
+      o=spr(RS.cy,RS.vy,tcy,kp,zp,dt); RS.cy=o[0]; RS.vy=o[1];
+      o=spr(RS.w ,RS.vw,T.w,ks,zs,dt); RS.w =o[0]; RS.vw=o[1];
+      o=spr(RS.h ,RS.vh,T.h,ks,zs,dt); RS.h =o[0]; RS.vh=o[1];
+
+      const sx=RS.w/R_zone.w, sy=RS.h/R_zone.h;
+      const tx=(RS.cx-RS.w/2)-R_zone.x, ty=(RS.cy-RS.h/2)-R_zone.y;
+      reelMorph.style.transform=
+        `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+      /* counter-scale both axes so the corner reads as a true 24px at any size */
+      reelMorph.style.borderRadius=`${(24/sx).toFixed(1)}px / ${(24/sy).toFixed(1)}px`;
+
+      if(!RS.settled && nd<0.005 && Math.hypot(RS.vx,RS.vy)<10 && Math.abs(RS.vw)<10){
+        RS.settled=true;
+        if(RS.target===1){ rmHud.classList.add('on'); if(GL.reelRipple) GL.reelRipple(); }
+      }
+      if(GL.reelSync) GL.reelSync(RS,smooth,dt);
+    }
   }
 
   /* magnetic — uses measured rects, no per-frame layout reads */
@@ -967,11 +1117,40 @@ function raf(now){
     fakeSticky(endSticky,R_end);
     const prog=clamp((smooth-R_end.y)/(R_end.h-vh),0,1);
     endNum.textContent=String(Math.round(prog*100)).padStart(3,'0');
+    endBarFill.style.transform=`scaleX(${prog.toFixed(4)})`;   // same value as the digits
     if(prog>=.999 && !transitioning) pageTransition();
+  }
+
+  /* ---- scroll rail ---- */
+  if(R_secs.length){
+    const sp=clamp(smooth/Math.max(1,docH-vh),0,1);
+    railP=lerp(railP,sp,.12);
+    railFill.style.transform=`scaleY(${railP.toFixed(4)})`;
+    railDot.style.transform=`translate(-50%,-50%) translateY(${(railP*railH).toFixed(1)}px)`;
+    let act=0;
+    for(let i=0;i<R_secs.length;i++) if(R_secs[i].y<=smooth+vh*0.4) act=i;
+    if(act!==railAct){
+      if(ticks[railAct]) ticks[railAct].classList.remove('act');
+      railAct=act; ticks[act].classList.add('act');
+      railLabel.textContent=R_secs[act].label;
+      railLabel.style.top=R_secs[act].top+'%';
+    }
+  }
+
+  /* ---- guide lines + waypoint crosses ---- */
+  for(const g of glines){
+    const raw=clamp((smooth+vh-g.y)/(vh*0.55),0,1);
+    g.p=lerp(g.p,1-Math.pow(1-raw,3),.12);
+    g.bar.style.transform=`scaleX(${g.p.toFixed(4)})`;
+    for(const c of g.cr){                       // pop exactly when the tip passes
+      const on=g.p>=c.stop-0.001;
+      if(on!==c.on){ c.on=on; c.el.classList.toggle('on',on); }
+    }
   }
 
   heroVis=R_hero?clamp(1-(smooth-vh*0.15)/(vh*0.85),0,1):0;
   GL.frame(smooth, now, heroVis, tunProg, vel);
+  lastNow=now;
 }
 requestAnimationFrame(raf);
 measure();
@@ -1076,7 +1255,13 @@ try{
     ndc.x=(e.clientX/innerWidth)*2-1; ndc.y=-(e.clientY/innerHeight)*2+1;
     if(heroOn){ ray.setFromCamera(ndc,camera); plane.constant=0;
       ray.ray.intersectPlane(plane,hitPt); world.copy(hitPt); }
+    /* fluid pointer: UV space, y flipped (RT origin is bottom-left) */
+    const nx=e.clientX/innerWidth, ny=1-e.clientY/innerHeight;
+    if(fp.inside){ fp.dx=nx-fp.x; fp.dy=ny-fp.y; } else { fp.dx=0; fp.dy=0; }
+    fp.x=nx; fp.y=ny; fp.moved=true; fp.inside=true;
   };
+  addEventListener('pointerout',e=>{ if(!e.relatedTarget) fp.inside=false; },{passive:true});
+  addEventListener('blur',()=>{ fp.inside=false; },{passive:true});
   addEventListener('pointerdown',e=>{
     if(!heroOn) return;
     ndc.x=(e.clientX/innerWidth)*2-1; ndc.y=-(e.clientY/innerHeight)*2+1;
@@ -1208,6 +1393,209 @@ try{
     p.material.uniforms.u_rip.value=1; p.material.uniforms.u_ripT.value=0; };
   GL.hover=(i,v)=>{ if(planes[i]) planes[i].userData.hoverTarget=v; };
 
+  /* ================= JELLY REEL PLANE (7th DOM-synced plane) ================= */
+  const JELLY_V=`
+    uniform vec2 u_c00,u_c10,u_c01,u_c11,u_cen,u_sq,u_size;
+    varying vec2 vUv;
+    void main(){
+      vUv=uv;
+      vec3 p=position;
+      vec2 off=mix(mix(u_c00,u_c10,uv.x),mix(u_c01,u_c11,uv.x),uv.y);
+      off+=u_cen*sin(uv.x*3.14159)*sin(uv.y*3.14159);   // belly bulge
+      p.xy+=off/max(u_size,vec2(1.0));
+      p.xy*=u_sq;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
+    }`;
+  const jellyMat=new THREE.ShaderMaterial({
+    vertexShader:JELLY_V, fragmentShader:CARD_F, transparent:true, depthWrite:false,
+    uniforms:{ u_time:{value:0}, u_hover:{value:0}, u_rip:{value:0}, u_ripT:{value:0},
+      u_ripPos:{value:new THREE.Vector2(.5,.5)}, u_ab:{value:0}, u_reveal:{value:1},
+      u_prog:{value:0}, u_domWH:{value:new THREE.Vector2(100,100)},
+      u_c1:{value:new THREE.Color().setHSL(.62,.7,.42)},
+      u_c2:{value:new THREE.Color().setHSL(.02,.85,.55)},
+      u_c00:{value:new THREE.Vector2()}, u_c10:{value:new THREE.Vector2()},
+      u_c01:{value:new THREE.Vector2()}, u_c11:{value:new THREE.Vector2()},
+      u_cen:{value:new THREE.Vector2()}, u_sq:{value:new THREE.Vector2(1,1)},
+      u_size:{value:new THREE.Vector2(100,100)} }
+  });
+  const jelly=new THREE.Mesh(new THREE.PlaneGeometry(1,1,24,16),jellyMat);
+  jelly.visible=false; oScene.add(jelly);
+
+  /* 4 corner springs chase the rect corners; the LAG is the bend.
+     ponytail: fixed per-corner stiffness instead of recomputing leading/trailing
+     edges each frame — asymmetric lag reads the same and costs nothing. */
+  const JK=[1.25,0.8,1.1,0.95];
+  const jc=[0,1,2,3].map(()=>({x:0,y:0,vx:0,vy:0}));
+  const jcen={x:0,y:0,vx:0,vy:0};
+  let jInit=false;
+
+  GL.reelRipple=()=>{ jellyMat.uniforms.u_rip.value=1; jellyMat.uniforms.u_ripT.value=0;
+    jellyMat.uniforms.u_ripPos.value.set(.5,.5); };
+
+  GL.reelSync=(R,scrollY,dt)=>{
+    const iw=innerWidth, ih=innerHeight;
+    const cyView=R.cy-scrollY;                       // doc space -> viewport
+    const ox=R.cx-iw/2, oy=ih/2-cyView, w=Math.max(1,R.w), h=Math.max(1,R.h);
+    if(cyView+h/2<-120 || cyView-h/2>ih+120){ jelly.visible=false; return; }
+    jelly.visible=true;
+    jelly.position.set(ox,oy,0); jelly.scale.set(w,h,1);
+
+    /* uv order: 00 bottom-left, 10 bottom-right, 01 top-left, 11 top-right */
+    const tg=[[ox-w/2,oy-h/2],[ox+w/2,oy-h/2],[ox-w/2,oy+h/2],[ox+w/2,oy+h/2]];
+    const K=95, Z=0.6, lim=0.10*Math.min(w,h);
+    const u=jellyMat.uniforms, uc=[u.u_c00,u.u_c10,u.u_c01,u.u_c11];
+    for(let i=0;i<4;i++){
+      const c=jc[i], k=K*JK[i], wq=Math.sqrt(k), cc=2*Z*wq;
+      if(!jInit){ c.x=tg[i][0]; c.y=tg[i][1]; }
+      c.vx+=(k*(tg[i][0]-c.x)-cc*c.vx)*dt; c.x+=c.vx*dt;
+      c.vy+=(k*(tg[i][1]-c.y)-cc*c.vy)*dt; c.y+=c.vy*dt;
+      let dx=c.x-tg[i][0], dy=c.y-tg[i][1];
+      const m=Math.hypot(dx,dy);
+      if(m>lim){ dx=dx/m*lim; dy=dy/m*lim; c.x=tg[i][0]+dx; c.y=tg[i][1]+dy; }  // never fold
+      uc[i].value.set(dx,dy);
+    }
+    { const k=K*0.7, wq=Math.sqrt(k), cc=2*Z*wq;
+      if(!jInit){ jcen.x=ox; jcen.y=oy; }
+      jcen.vx+=(k*(ox-jcen.x)-cc*jcen.vx)*dt; jcen.x+=jcen.vx*dt;
+      jcen.vy+=(k*(oy-jcen.y)-cc*jcen.vy)*dt; jcen.y+=jcen.vy*dt;
+      let dx=jcen.x-ox, dy=jcen.y-oy; const m=Math.hypot(dx,dy);
+      if(m>lim){ dx=dx/m*lim; dy=dy/m*lim; jcen.x=ox+dx; jcen.y=oy+dy; }
+      u.u_cen.value.set(dx,dy);
+    }
+    jInit=true;
+
+    /* squash & stretch along the dominant travel axis, clamped +-8% */
+    const ax=Math.abs(R.vx), ay=Math.abs(R.vy), sp=Math.hypot(R.vx,R.vy);
+    const amt=Math.min(0.08,sp*0.00035), dom=Math.max(ax,ay)||1;
+    u.u_sq.value.set(1+amt*(ax-ay)/dom, 1+amt*(ay-ax)/dom);
+
+    u.u_size.value.set(w,h); u.u_domWH.value.set(w,h);
+    u.u_time.value=(performance.now()-t0)*.001;
+    u.u_ripT.value+=0.05; u.u_rip.value*=0.955;
+  };
+
+  /* ================= AURORA FLUID CURSOR LAYER ================= */
+  /* advection + splats + dissipation only. No pressure/divergence solve —
+     for soft aurora smoke on white it is indistinguishable and ~4 tiny passes. */
+  const FQ=new THREE.Mesh(new THREE.PlaneGeometry(2,2),null);
+  const fScene=new THREE.Scene(); fScene.add(FQ);
+  const fCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+  let fw=1,fh=1,velA,velB,dyeA,dyeB;
+  const mkRT=()=>new THREE.WebGLRenderTarget(fw,fh,{type:THREE.HalfFloatType,
+    minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,
+    depthBuffer:false,stencilBuffer:false});
+  function allocFluid(){
+    fw=Math.max(2,Math.floor(innerWidth/4)); fh=Math.max(2,Math.floor(innerHeight/4));
+    [velA,velB,dyeA,dyeB].forEach(rt=>rt&&rt.dispose());
+    velA=mkRT(); velB=mkRT(); dyeA=mkRT(); dyeB=mkRT();
+    [velA,velB,dyeA,dyeB].forEach(rt=>{ renderer.setRenderTarget(rt); renderer.clear(true,false,false); });
+    renderer.setRenderTarget(null);
+  }
+  const VS_F=`varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.0,1.0); }`;
+  const advectMat=new THREE.ShaderMaterial({vertexShader:VS_F,depthTest:false,depthWrite:false,
+    uniforms:{u_src:{value:null},u_vel:{value:null},u_dt:{value:0},u_diss:{value:1}},
+    fragmentShader:`precision highp float; varying vec2 vUv;
+      uniform sampler2D u_src,u_vel; uniform float u_dt,u_diss;
+      void main(){ vec2 v=texture2D(u_vel,vUv).xy;
+        gl_FragColor=texture2D(u_src,vUv-v*u_dt)*u_diss; }`});
+  const splatMat=new THREE.ShaderMaterial({vertexShader:VS_F,depthTest:false,depthWrite:false,
+    uniforms:{u_src:{value:null},u_point:{value:new THREE.Vector2()},
+      u_color:{value:new THREE.Vector3()},u_radius:{value:.0004},u_aspect:{value:1}},
+    fragmentShader:`precision highp float; varying vec2 vUv;
+      uniform sampler2D u_src; uniform vec2 u_point; uniform vec3 u_color;
+      uniform float u_radius,u_aspect;
+      void main(){ vec2 p=vUv-u_point; p.x*=u_aspect;
+        float g=exp(-dot(p,p)/u_radius);
+        gl_FragColor=vec4(texture2D(u_src,vUv).rgb+u_color*g,1.0); }`});
+  const compMat=new THREE.ShaderMaterial({vertexShader:VS_F,transparent:true,
+    depthTest:false,depthWrite:false, uniforms:{u_dye:{value:null}},
+    fragmentShader:`precision highp float; varying vec2 vUv; uniform sampler2D u_dye;
+      void main(){ vec3 c=texture2D(u_dye,vUv).rgb;
+        float m=max(max(c.r,c.g),c.b);
+        if(m<0.002) discard;
+        vec3 col=c/max(m,1e-4);                      // keep hue saturated
+        float a=clamp(m,0.0,1.0)*0.5;                // cap so text stays readable
+        gl_FragColor=vec4(col,a); }`});
+
+  /* aurora -> solar-storm palette */
+  const AUR=[[.24,.91,.75],[.35,.78,1.0],[.49,.36,1.0],[1.0,.30,.77]];
+  const STORM=[[1.0,.35,.12],[1.0,.70,.28]];
+  const fp={x:.5,y:.5,px:.5,py:.5,dx:0,dy:0,moved:false,inside:false,dist:0,storm:0};
+  let fluidReady=false;
+
+  GL.readDye=(x,y,w,h)=>{                            // probe hook (half-float decode)
+    const buf=new Uint16Array(w*h*4);
+    renderer.readRenderTargetPixels(dyeA,x,y,w,h,buf);
+    const h2f=v=>{const s=(v&0x8000)>>15,e=(v&0x7C00)>>10,f=v&0x3FF;
+      if(e===0) return (s?-1:1)*Math.pow(2,-14)*(f/1024);
+      if(e===31) return f?NaN:(s?-Infinity:Infinity);
+      return (s?-1:1)*Math.pow(2,e-15)*(1+f/1024);};
+    return Array.from(buf,h2f);
+  };
+  GL.fluidSize=()=>[fw,fh];
+
+  function fluidStep(dt,scrollVel){
+    if(!fluidReady || document.hidden) return;
+    const A=innerWidth/innerHeight;
+    // 1. advect velocity by itself
+    FQ.material=advectMat;
+    advectMat.uniforms.u_src.value=velA.texture; advectMat.uniforms.u_vel.value=velA.texture;
+    advectMat.uniforms.u_dt.value=dt; advectMat.uniforms.u_diss.value=.985;
+    renderer.setRenderTarget(velB); renderer.render(fScene,fCam);
+    let s=velA; velA=velB; velB=s;
+
+    const sBias=clampf(scrollVel*0.00035,-.35,.35);
+    const speed=Math.hypot(fp.dx,fp.dy);
+    fp.storm=Math.max(fp.storm*0.94, Math.min(1,speed*26));
+    if(fp.inside && (fp.moved || Math.abs(scrollVel)>1)){
+      // 2. splat velocity (+ upward bias from scroll so the aura smears)
+      FQ.material=splatMat;
+      splatMat.uniforms.u_src.value=velA.texture;
+      splatMat.uniforms.u_point.value.set(fp.x,fp.y);
+      splatMat.uniforms.u_aspect.value=A;
+      splatMat.uniforms.u_radius.value=.00022+speed*.03;
+      splatMat.uniforms.u_color.value.set(fp.dx*7, fp.dy*7+sBias, 0);
+      renderer.setRenderTarget(velB); renderer.render(fScene,fCam);
+      s=velA; velA=velB; velB=s;
+    }
+    // 3. advect dye by velocity
+    FQ.material=advectMat;
+    advectMat.uniforms.u_src.value=dyeA.texture; advectMat.uniforms.u_vel.value=velA.texture;
+    advectMat.uniforms.u_diss.value=.975;
+    renderer.setRenderTarget(dyeB); renderer.render(fScene,fCam);
+    s=dyeA; dyeA=dyeB; dyeB=s;
+
+    if(fp.inside && fp.moved){
+      // 4. splat dye — hue drifts with time + travel, storms shift to hot orange
+      fp.dist+=speed;
+      const ph=(fp.dist*2.2+performance.now()*0.00013)%1;
+      const f=ph*AUR.length, i0=Math.floor(f)%AUR.length, i1=(i0+1)%AUR.length, m=f-Math.floor(f);
+      let r=AUR[i0][0]+(AUR[i1][0]-AUR[i0][0])*m;
+      let g=AUR[i0][1]+(AUR[i1][1]-AUR[i0][1])*m;
+      let b=AUR[i0][2]+(AUR[i1][2]-AUR[i0][2])*m;
+      if(fp.storm>0.02){
+        const st=STORM[i0%2], k=fp.storm*0.85;
+        r+= (st[0]-r)*k; g+=(st[1]-g)*k; b+=(st[2]-b)*k;
+      }
+      const amp=(0.16+fp.storm*0.5)*Math.min(1,speed*30+0.25);
+      FQ.material=splatMat;
+      splatMat.uniforms.u_src.value=dyeA.texture;
+      splatMat.uniforms.u_point.value.set(fp.x,fp.y);
+      splatMat.uniforms.u_aspect.value=A;
+      splatMat.uniforms.u_radius.value=.00016+speed*.05+fp.storm*.0006;
+      splatMat.uniforms.u_color.value.set(r*amp,g*amp,b*amp);
+      renderer.setRenderTarget(dyeB); renderer.render(fScene,fCam);
+      s=dyeA; dyeA=dyeB; dyeB=s;
+    }
+    renderer.setRenderTarget(null);
+    fp.moved=false; fp.dx*=.6; fp.dy*=.6;
+  }
+  function fluidComposite(){
+    if(!fluidReady) return;
+    FQ.material=compMat; compMat.uniforms.u_dye.value=dyeA.texture;
+    renderer.render(fScene,fCam);
+  }
+
   /* ================= RESIZE ================= */
   GL.resize=()=>{
     camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
@@ -1215,23 +1603,31 @@ try{
     oCam.left=-innerWidth/2; oCam.right=innerWidth/2;
     oCam.top=innerHeight/2; oCam.bottom=-innerHeight/2; oCam.updateProjectionMatrix();
     renderer.setSize(innerWidth,innerHeight); bounds();
+    allocFluid(); fluidReady=true;
   };
   addEventListener('resize',GL.resize);
 
   /* ================= FRAME ================= */
-  let t0=performance.now(), introAt=0, heroOn=true, camZ=8;
+  let t0=performance.now(), introAt=0, heroOn=true, camZ=8, mLastNow=0;
   GL.ok=true;
+  document.body.classList.add('hasgl');
+  allocFluid(); fluidReady=true;
   GL.stats=()=>{ let m=0; scene.traverse(o=>{if(o.isMesh)m++;});
     return {meshes:m,bodies:bodies.length,dbw:renderer.getContext().drawingBufferWidth,
       particles:PN, planes:planes.length, rings:RINGS}; };
-  GL.dbg={bodies,points,planes,tCam,ringMesh,poke,scene,tScene,oScene};
+  GL.dbg={bodies,points,planes,tCam,ringMesh,poke,scene,tScene,oScene,
+    jelly,jellyMat,jc,jcen,fp,getDye:()=>dyeA};
 
   GL.frame=(scrollY,now,heroVis,tunProg,pvel)=>{
     const t=(now-t0)*.001;
+    const fdt=Math.min(0.033,(now-mLastNow)/1000)||0.016; mLastNow=now;
     heroOn = heroVis>0.02;
     const tunnelOn = tunProg>0.001 && tunProg<0.999;
 
     renderer.clear();
+    /* fluid aura draws FIRST — background layer under every scene */
+    fluidStep(fdt,pvel);
+    fluidComposite();
 
     /* ---------- HERO ---------- */
     if(heroOn){
@@ -1381,7 +1777,7 @@ try{
       p.userData.rev=lerpf(rev, R.el.closest('.card').classList.contains('inview')?1:0, .07);
       u.u_reveal.value=p.userData.rev;
     }
-    if(anyCard) renderer.render(oScene,oCam);
+    if(anyCard || jelly.visible) renderer.render(oScene,oCam);
   };
 }catch(err){
   console.warn('[gl] disabled, DOM experience continues:', err && err.message);
