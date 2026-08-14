@@ -1104,9 +1104,12 @@ const kl=new THREE.DirectionalLight(0xffffff,3.4); kl.position.set(4,6,7); scene
 const kl2=new THREE.DirectionalLight(0x9a7bff,1.8); kl2.position.set(-6,-3,4); scene.add(kl2);
 const kl3=new THREE.DirectionalLight(0xffffff,1.2); kl3.position.set(-2,2,-6); scene.add(kl3);
 
-const NJ=56;
-const capGeo=new THREE.CapsuleGeometry(.26,.62,6,14);
-const discGeo=new THREE.CylinderGeometry(.235,.235,.07,16);
+/* ~1.7x bigger, half the count: chunkier read, and 28 bodies = 378 pairs not 1540 */
+const NJ=28;
+/* slim shaft + barely-flared end caps -> crisp plus silhouette, no blobby plates */
+const CAP_R=.34, CAP_L=1.12, DISC_R=CAP_R*1.05, DISC_H=.077;
+const capGeo=new THREE.CapsuleGeometry(CAP_R,CAP_L,6,14);
+const discGeo=new THREE.CylinderGeometry(DISC_R,DISC_R,DISC_H,16);
 const jackMat=new THREE.MeshPhysicalMaterial({roughness:.25,metalness:.0,clearcoat:.8,
   clearcoatRoughness:.18,envMap:ENV,envMapIntensity:1.0});
 const discMat=new THREE.MeshPhysicalMaterial({color:0x14141b,roughness:.35,metalness:0,
@@ -1119,7 +1122,7 @@ scene.add(discIM);
 const ARM=[new THREE.Matrix4(),
   new THREE.Matrix4().makeRotationZ(Math.PI/2),
   new THREE.Matrix4().makeRotationX(Math.PI/2)];
-const CAPEND=.57;
+const CAPEND=CAP_L/2+CAP_R;
 const DISC=[];
 [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]].forEach(a=>{
   const m=new THREE.Matrix4();
@@ -1128,18 +1131,166 @@ const DISC=[];
   DISC.push(m);
 });
 const COLORS=[0x3B23D6,0xEFEFF4,0x17171E];
+
+/* ======== RIGID-BODY TOY PHYSICS (no spring-to-home, no float) ========
+   Bounding-sphere bodies in a frustum-fitted box: gravity -> pile on the floor,
+   cursor sweep plows them up, they tumble, rain back down, settle, sleep. */
+const RJ=.86;                                   // collision sphere ~ the arm reach
+const G=-26, REST=.35, FLOOR_REST=.30, FRIC=.85, FLOOR_FRIC=.86,
+      VMAX=60, STIR_MAX=13, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3;
+const BOX={hw:8,hh:4,zn:-1.7,zf:1.3,spawned:false};
 const jacks=[];
-for(let i=0;i<NJ;i++){
-  jacks.push({
-    ci:i%3,
-    home:new THREE.Vector3((Math.random()-.5)*12.4,(Math.random()-.5)*5.6,(Math.random()-.5)*4.4),
-    pos:new THREE.Vector3(), vel:new THREE.Vector3(),
-    q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6,Math.random()*6,Math.random()*6)),
-    spin:new THREE.Vector3((Math.random()-.5)*.5,(Math.random()-.5)*.5,(Math.random()-.5)*.5),
-    s:1, sv:0, sc:.001, born:i*9, r:.72
-  });
+for(let i=0;i<NJ;i++) jacks.push({ci:i%3,
+  pos:new THREE.Vector3(), vel:new THREE.Vector3(), spin:new THREE.Vector3(),
+  q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6,Math.random()*6,Math.random()*6)),
+  s:1, sv:0, sc:0, t0:i*38, wait:true, sleep:false, still:0});
+
+const _e=new THREE.Euler(), _qs=new THREE.Quaternion();
+const wake=j=>{ j.sleep=false; j.still=0; };
+function respawn(j){
+  j.pos.set((Math.random()-.5)*BOX.hw*1.6, BOX.hh+1+Math.random()*3,
+            BOX.zn+Math.random()*(BOX.zf-BOX.zn));
+  j.vel.set(0,0,0);
+  j.spin.set((Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2);
+  j.s=1; j.sv=0; wake(j);
 }
-jacks.forEach(j=>j.pos.copy(j.home));
+function fitBounds(aspect){
+  const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.position.z, hw=hh*aspect;
+  if(Math.abs(hw-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
+    BOX.hw=hw; BOX.hh=hh;
+    /* the walls just moved: sleepers skip the wall clamp, so a resize would strand
+       them outside the new panel (scissored away = jacks vanish off the sides) */
+    if(BOX.spawned) jacks.forEach(wake);
+  }
+  if(!BOX.spawned){ BOX.spawned=true; jacks.forEach(respawn); }
+}
+
+/* cursor sweep: impulse away from the cursor path with a strong upward bias */
+const stirPrev=new THREE.Vector3(999,999,0), stirV=new THREE.Vector3();
+function stir(h){
+  if(world.x>900||stirPrev.x>900){ stirPrev.copy(world); return; }
+  stirV.subVectors(world,stirPrev).divideScalar(Math.max(.004,h));
+  stirPrev.copy(world);
+  const sp=Math.min(80,stirV.length());
+  if(sp<.15) return;
+  const R=1.6+RJ+1.6, ux=stirV.x/sp, uz=stirV.z/sp;
+  /* The cursor sphere is a moving SOLID: it drags overlapped bodies toward its own
+     velocity (+ outward + up), it does not add a fixed impulse per frame. That
+     distinction is the whole feel — an additive impulse delivers energy proportional
+     to PATH LENGTH, so a slow drag across the pile flung as hard as a fast flick.
+     Coupling to a speed-scaled target makes a slow push nudge and a fast sweep toss. */
+  for(const j of jacks){
+    if(j.wait) continue;
+    const dx=j.pos.x-world.x, dy=j.pos.y-world.y, dz=j.pos.z-world.z;
+    const d=Math.hypot(dx,dy,dz); if(d>R) continue;
+    const inv=1/Math.max(.3,d), k=(1-d/R)*.55;
+    const ox=j.vel.x, oy=j.vel.y, oz=j.vel.z;
+    j.vel.x=lp(ox, ux*sp*.55+dx*inv*sp*.30, k);
+    j.vel.y=lp(oy, sp*.32   +dy*inv*sp*.15, k);   // <- the upward bias ("bới tung")
+    j.vel.z=lp(oz, uz*sp*.35+dz*inv*sp*.30, k);
+    if(j.vel.lengthSq()>STIR_MAX*STIR_MAX) j.vel.setLength(STIR_MAX);
+    const dv=Math.hypot(j.vel.x-ox,j.vel.y-oy,j.vel.z-oz);
+    if(dv<.05) continue;                          // hovering must not wake the pile
+    const sw=Math.min(9,dv*.55);
+    j.spin.x+=(Math.random()-.5)*sw;
+    j.spin.y+=(Math.random()-.5)*sw;
+    j.spin.z+=(Math.random()-.5)*sw;
+    j.sv-=Math.min(.5,dv*.02);
+    wake(j);
+  }
+}
+
+function physSub(h){
+  const fy=-BOX.hh+RJ, wx=BOX.hw-RJ, D=RJ*2;
+  for(const j of jacks){
+    if(j.wait||j.sleep) continue;
+    j.vel.y+=G*h;
+    if(j.vel.lengthSq()>VMAX*VMAX) j.vel.setLength(VMAX);
+    j.pos.addScaledVector(j.vel,h);
+  }
+  /* ponytail: O(n^2) broadphase — 28 bodies / 378 pairs, a grid would cost more than it saves */
+  for(let a=0;a<NJ;a++){
+    const A=jacks[a]; if(A.wait) continue;
+    for(let b=a+1;b<NJ;b++){
+      const C=jacks[b]; if(C.wait||(A.sleep&&C.sleep)) continue;
+      let dx=C.pos.x-A.pos.x, dy=C.pos.y-A.pos.y, dz=C.pos.z-A.pos.z;
+      let d=Math.sqrt(dx*dx+dy*dy+dz*dz);
+      if(d>=D) continue;
+      if(d<1e-4){ dx=Math.random()-.5; dy=.5; dz=Math.random()-.5; d=Math.hypot(dx,dy,dz); }
+      const nx=dx/d, ny=dy/d, nz=dz/d, pen=D-d;
+      const vn=(C.vel.x-A.vel.x)*nx+(C.vel.y-A.vel.y)*ny+(C.vel.z-A.vel.z)*nz;
+      /* only a REAL impact wakes a sleeper — resting overlap must not re-wake the pile */
+      if(-vn>.5||pen>RJ*.8){ wake(A); wake(C); }
+      const wa=A.sleep?0:1, wc=C.sleep?0:1, wt=wa+wc; if(!wt) continue;
+      const cor=Math.max(0,pen-.02)*.8/wt;   // slop: below 2cm overlap, leave it alone
+      if(wa){ A.pos.x-=nx*cor; A.pos.y-=ny*cor; A.pos.z-=nz*cor; }
+      if(wc){ C.pos.x+=nx*cor; C.pos.y+=ny*cor; C.pos.z+=nz*cor; }
+      if(vn>=0) continue;
+      const im=-(1+(-vn<REST_VN?0:REST))*vn/wt;   // slow contact: kill it, don't buzz
+      if(wa){ A.vel.x-=nx*im; A.vel.y-=ny*im; A.vel.z-=nz*im; }
+      if(wc){ C.vel.x+=nx*im; C.vel.y+=ny*im; C.vel.z+=nz*im; }
+      let tx=C.vel.x-A.vel.x, ty=C.vel.y-A.vel.y, tz=C.vel.z-A.vel.z;
+      const tn=tx*nx+ty*ny+tz*nz; tx-=tn*nx; ty-=tn*ny; tz-=tn*nz;
+      const tl=Math.hypot(tx,ty,tz);
+      if(tl>1e-4){
+        const k=(1-FRIC)/wt;
+        /* tumble only from a REAL impulse — a resting contact must not trickle spin
+           into the pile, or nothing ever gets under the sleep threshold */
+        const sw=(-vn>REST_VN)?Math.min(6,tl*.9)*.5:0;
+        const cx=ny*tz-nz*ty, cy=nz*tx-nx*tz, cz=nx*ty-ny*tx;
+        if(wa){ A.vel.x+=tx*k; A.vel.y+=ty*k; A.vel.z+=tz*k;
+                A.spin.x+=cx*sw; A.spin.y+=cy*sw; A.spin.z+=cz*sw; }
+        if(wc){ C.vel.x-=tx*k; C.vel.y-=ty*k; C.vel.z-=tz*k;
+                C.spin.x-=cx*sw; C.spin.y-=cy*sw; C.spin.z-=cz*sw; }
+      }
+      const sq=Math.min(.5,-vn*.045);
+      if(sq>.02){ if(wa)A.sv-=sq; if(wc)C.sv-=sq; }
+    }
+  }
+  for(const j of jacks){
+    if(j.wait) continue;
+    if(!Number.isFinite(j.pos.x+j.pos.y+j.pos.z)||!Number.isFinite(j.vel.x+j.vel.y+j.vel.z)
+       ||Math.abs(j.pos.x)>BOX.hw+25||j.pos.y>BOX.hh+80||j.pos.y<fy-3||Math.abs(j.pos.z)>12){
+      respawn(j); continue; }
+    if(j.sleep) continue;
+    if(j.pos.y<fy){                                  // FLOOR
+      j.pos.y=fy;
+      if(j.vel.y<0){
+        const vy=-j.vel.y;
+        j.vel.y = vy>REST_VN ? vy*FLOOR_REST : 0;
+        j.vel.x*=FLOOR_FRIC; j.vel.z*=FLOOR_FRIC; j.spin.multiplyScalar(.9);
+        if(vy>1.5) j.sv-=Math.min(.6,vy*.04);
+      }
+    }
+    if(j.pos.x> wx){ j.pos.x= wx; if(j.vel.x>0) j.vel.x*=-REST; }
+    else if(j.pos.x<-wx){ j.pos.x=-wx; if(j.vel.x<0) j.vel.x*=-REST; }
+    if(j.pos.z>BOX.zf){ j.pos.z=BOX.zf; if(j.vel.z>0) j.vel.z*=-REST; }
+    else if(j.pos.z<BOX.zn){ j.pos.z=BOX.zn; if(j.vel.z<0) j.vel.z*=-REST; }
+    /* airborne: keep the tumble alive. slow/at rest: kill it fast so the pile is calm */
+    const slow=j.vel.lengthSq()<SLEEP_V*SLEEP_V;
+    j.spin.multiplyScalar(1-Math.min(.6,(slow?9:.85)*h));
+    if(slow && j.spin.lengthSq()<SLEEP_W*SLEEP_W) j.still+=h;
+    else j.still=0;
+    if(j.still>SLEEP_T){ j.sleep=true; j.vel.set(0,0,0); j.spin.set(0,0,0); j.s=1; j.sv=0; }
+  }
+}
+
+function stepPhysics(dt,elapsed){
+  const D=Math.min(.033,Math.max(.001,dt||.016));
+  for(const j of jacks){
+    if(j.wait){ if(elapsed<j.t0) continue; j.wait=false; }   // staggered rain
+    if(j.sc<1) j.sc=Math.min(1,j.sc+D*5);
+  }
+  stir(D);
+  physSub(D*.5); physSub(D*.5);                              // 2 substeps: no tunnelling
+  for(const j of jacks){
+    if(!j.wait&&!j.sleep){
+      _e.set(j.spin.x*D,j.spin.y*D,j.spin.z*D);
+      _qs.setFromEuler(_e); j.q.multiply(_qs);
+    }
+    j.sv+=(1-j.s)*14*D; j.sv*=.88; j.s+=j.sv*D; j.s=cl(j.s,.6,1.5);
+  }
+}
 /* one InstancedMesh per colour: avoids instanceColor needing vertexColors,
    which turns vColor black when the geometry has no colour attribute. */
 const groups=[[],[],[]];
@@ -1164,16 +1315,26 @@ GL.pointer=e=>{
   const top=R_panel.y-smooth;
   ndc.x=((e.clientX-R_panel.x)/R_panel.w)*2-1;
   ndc.y=-((e.clientY-top)/R_panel.h)*2+1;
+  /* park the cursor when it leaves the panel, else an off-panel flick reads as a
+     huge sweep velocity and detonates the pile */
+  if(Math.abs(ndc.x)>1.2||Math.abs(ndc.y)>1.2){ world.set(999,999,0); return; }
   const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.position.z;
   world.set(ndc.x*hh*(R_panel.w/R_panel.h), ndc.y*hh, 0);
 };
+/* click = confetti toss of the pile */
 addEventListener('pointerdown',()=>{
-  if(!heroOn) return;
+  if(!heroOn||world.x>900) return;
+  const R=6.4;
   for(const j of jacks){
-    const d=j.pos.distanceTo(world);
-    if(d<4.5){ const f=(1-d/4.5)*.55;
-      j.vel.addScaledVector(j.pos.clone().sub(world).normalize(),f);
-      j.sv-=f*1.6; j.spin.x+=(Math.random()-.5)*3; }
+    if(j.wait) continue;
+    const dx=j.pos.x-world.x, dy=j.pos.y-world.y, dz=j.pos.z-world.z;
+    const d=Math.hypot(dx,dy,dz); if(d>R) continue;
+    const f=(1-d/R)*12, inv=1/Math.max(.35,d);
+    j.vel.x+=dx*inv*f; j.vel.y+=dy*inv*f*.5+f*1.25; j.vel.z+=dz*inv*f*.7;
+    j.spin.x+=(Math.random()-.5)*f*2.4;
+    j.spin.y+=(Math.random()-.5)*f*2.4;
+    j.spin.z+=(Math.random()-.5)*f*2.4;
+    j.sv-=Math.min(.6,f*.05); wake(j);
   }
 });
 
@@ -1460,7 +1621,9 @@ GL.stats=()=>({jacks:jacks.length,capMeshes:capIMs.length,
   capInst:capIMs.reduce((a,m)=>a+m.count,0),discInst:discIM.count,
   planes:planes.length,sparkles:SPK,rings:RINGS,dbw:renderer.getContext().drawingBufferWidth});
 GL.dbg={jacks,capIMs,blob,jelly,jellyMat,planes,tCam,spk,trail,trailPts,orb,scene,tScene,oScene,
-  renderer,camera,env:()=>!!ENV,world:()=>world};
+  renderer,camera,env:()=>!!ENV,world:()=>world,
+  BOX,RJ,setCursor:(x,y)=>world.set(x,y,0),
+  awake:()=>jacks.filter(j=>!j.sleep&&!j.wait).length};
 
 const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _s=new THREE.Vector3(), _t=new THREE.Matrix4();
 GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
@@ -1474,40 +1637,17 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
   /* ---------- HERO (scissored to the dark panel) ---------- */
   if(heroOn && R_panel){
     const pc=document.getElementById('pre').classList;
-    if(pc.contains('wipe')||pc.contains('gone')){
-      if(!introAt) introAt=now;
-      for(const j of jacks){ if(j.sc>=1) continue;
-        const p=cl((now-introAt-j.born)/700,0,1), c1=1.70158, c3=c1+1;
-        j.sc=p>=1?1:1+c3*Math.pow(p-1,3)+c1*Math.pow(p-1,2); }
-    }
-    blob.position.lerp(world,.25);
+    if(!introAt&&(pc.contains('wipe')||pc.contains('gone'))) introAt=now;
+    if(world.x<900) blob.position.lerp(world,.25);
     if(!RMx){ camera.position.x=lp(camera.position.x,ndc.x*.3,.05);
       camera.position.y=lp(camera.position.y,ndc.y*.3,.05); camera.lookAt(0,0,0); }
 
-    for(const j of jacks){
-      /* spring home + slow collective tumble */
-      const hx=j.home.x+Math.sin(t*.28+j.home.y)*.5;
-      const hy=j.home.y+Math.cos(t*.24+j.home.x)*.4;
-      j.vel.x+=(hx-j.pos.x)*.010; j.vel.y+=(hy-j.pos.y)*.010;
-      j.vel.z+=(j.home.z-j.pos.z)*.010;
-      /* pointer sphere shoves jacks out, void closes behind */
-      const dx=j.pos.x-world.x, dy=j.pos.y-world.y, dz=j.pos.z-world.z;
-      const d=Math.hypot(dx,dy,dz);
-      if(d<1.6+j.r && d>.001){
-        const f=(1-d/(1.6+j.r))*.16;
-        j.vel.x+=dx/d*f; j.vel.y+=dy/d*f; j.vel.z+=dz/d*f;
-        j.spin.x+=(Math.random()-.5)*f*6; j.spin.z+=(Math.random()-.5)*f*6;
-        j.sv-=f*1.1;
-      }
-      j.vel.multiplyScalar(.90); j.vel.clampLength(0,.7); j.pos.add(j.vel);
-      /* balloon squash spring reused for impact jiggle */
-      j.sv+=(1-j.s)*14*dt; j.sv*=.88; j.s+=j.sv*dt; j.s=cl(j.s,.6,1.5);
-      _q.setFromEuler(new THREE.Euler(j.spin.x*dt,j.spin.y*dt,j.spin.z*dt));
-      j.q.multiply(_q); j.spin.multiplyScalar(.985);
-    }
+    fitBounds(R_panel.w/R_panel.h);
+    if(introAt) stepPhysics(dt,now-introAt);
+
     const slot=[0,0,0];
     for(let i=0;i<jacks.length;i++){
-      const j=jacks[i], sc=j.sc;
+      const j=jacks[i], sc=Math.max(1e-4,j.sc);
       _s.set(sc*j.s,sc*(2-j.s),sc*j.s);
       _t.compose(j.pos,j.q,_s);
       const im=capIMs[j.ci], base=slot[j.ci]*3; slot[j.ci]++;
