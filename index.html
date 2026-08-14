@@ -145,6 +145,13 @@ input{font:inherit}
 #heroTitle{margin:0;max-width:340px;font-size:20px;line-height:1.45;font-weight:400;letter-spacing:-.01em}
 #panelWrap{position:relative;width:94vw;height:72vh;margin:0 auto}
 #panel{position:absolute;inset:0;background:var(--dark);border-radius:28px}
+/* #app is a z-index:2 stacking context ABOVE #glwrap(1), so an opaque #panel hides
+   the entire hero scene. With GL up, the dark backdrop moves BEHIND the canvas.
+   #panel keeps its fill for the .nogl path. */
+.hasgl #panel{background:transparent}
+#panelBg{position:fixed;left:0;top:0;z-index:0;display:none;background:var(--dark);
+  border-radius:28px;will-change:transform}
+.hasgl #panelBg{display:block}
 .pcorner{position:absolute;width:11px;height:11px;color:var(--ink-25)}
 .pcorner::before,.pcorner::after{content:"";position:absolute;background:currentColor}
 .pcorner::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-50%)}
@@ -343,6 +350,7 @@ footer{background:#F6F5FB;padding:100px var(--pad) 34px;border-radius:28px 28px 
 </div>
 
 <div id="curtain"></div>
+<div id="panelBg"></div>
 <div id="stage"></div>
 <div id="ring"></div>
 <div id="stageText"><div><div class="kl" data-kx="1">Step Into A New World</div>
@@ -540,7 +548,8 @@ footer{background:#F6F5FB;padding:100px var(--pad) 34px;border-radius:28px 28px 
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const lerp=(a,b,t)=>a+(b-a)*t, clamp=(v,a,b)=>v<a?a:v>b?b:v;
 function spr(x,v,t,k,z,dt){ const w=Math.sqrt(k); v+=(k*(t-x)-2*z*w*v)*dt; return [x+v*dt,v]; }
-const app=document.getElementById('app'), spacer=document.getElementById('spacer');
+const app=document.getElementById('app'), spacer=document.getElementById('spacer'),
+      panelBg=document.getElementById('panelBg');
 
 /* GL stub declared FIRST: measure() runs before the module and would otherwise
    hit the TDZ of a later `const GL`. */
@@ -722,6 +731,8 @@ function measure(){
   const g=id=>{const e=document.getElementById(id),r=e.getBoundingClientRect();
     return {el:e,y:r.top,h:r.height,x:r.left,w:r.width};};
   R_stmt=g('stmt'); R_hero=g('hero'); R_panel=g('panelWrap');
+  panelBg.style.left=R_panel.x+'px';
+  panelBg.style.width=R_panel.w+'px'; panelBg.style.height=R_panel.h+'px';
   R_tab=g('tabletZone'); R_take=g('takeover'); R_cta=g('cta');
   R_foot=g('footerWrap'); R_end=g('end');
   const ts=document.getElementById('reelThumbSlot').getBoundingClientRect();
@@ -850,7 +861,7 @@ const stage=document.getElementById('stage'), stageText=document.getElementById(
       tablet=document.getElementById('tablet'), takeSticky=document.getElementById('takeSticky'),
       endSticky=document.getElementById('endSticky'), footer=document.getElementById('footer'),
       ctaLink=document.getElementById('ctaLink');
-let frame=0, lastNow=0, heroVis=1, takeP=0, morphP=0, phase='-', flashed=false, stageOn=0;
+let frame=0, lastNow=0, heroVis=1, takeP=0, morphP=0, phase='-', flashed=false, stageOn=0, stickerOn=0;
 
 function raf(now){
   requestAnimationFrame(raf);
@@ -961,6 +972,12 @@ function raf(now){
     tablet.style.transform=
       `translate3d(${tx.toFixed(1)}px,${ty.toFixed(1)}px,0) scale(${s.toFixed(4)})`;
     tablet.style.borderRadius=(22/s).toFixed(1)+'px';
+    /* HAND-OFF: the tablet is opaque #111 inside #app(z2), i.e. ON TOP of #glwrap(z1).
+       Once it has filled the screen it must get out of the way or it hides the tunnel.
+       Derived from tp, so scrolling back up restores it. */
+    const tHide=clamp((tp-0.72)/0.2,0,1);
+    tablet.style.opacity=(1-tHide).toFixed(3);
+    tablet.style.visibility=tHide>=1?'hidden':'visible';
 
     fakeSticky(takeSticky,R_take);
     takeP=clamp((smooth-R_take.y)/Math.max(1,R_take.h-vh),0,1);
@@ -968,8 +985,11 @@ function raf(now){
     /* dark stage on from tablet expansion through the CTA, off once footer covers */
     const on = (tp>0.35 && R_foot && smooth < R_foot.y-vh*0.35) ? 1 : 0;
     if(on!==stageOn){ stageOn=on; stage.style.opacity=on?'1':'0';
-      ring.style.opacity=on?'1':'0'; document.getElementById('stickers').style.opacity=on?'1':'0';
+      ring.style.opacity=on?'1':'0';
       nav.classList.toggle('onDark',!!on || menuOpen); }
+    /* stickers belong to the CTA finale (phase D onward), not to the tunnel */
+    const stkOn=(on && takeP>0.93)?1:0;
+    if(stkOn!==stickerOn){ stickerOn=stkOn; stickersEl.style.opacity=stkOn?'1':'0'; }
 
     phase = takeP<0.25?'A':takeP<0.5?'B':takeP<0.95?'C':'D';
     /* B: text spreads then scales past the camera */
@@ -1028,6 +1048,9 @@ function raf(now){
     if(prog>=.999 && !transitioning) pageTransition();
   }
 
+  /* dark hero backdrop lives BEHIND the canvas (z0) — track the panel rect */
+  if(R_panel) panelBg.style.transform=`translate3d(0,${(R_panel.y-smooth).toFixed(1)}px,0)`;
+
   heroVis=R_hero?clamp(1-(smooth-vh*0.15)/(vh*0.85),0,1):0;
   GL.frame(smooth,now,heroVis,takeP,vel,dt);
   lastNow=now;
@@ -1062,18 +1085,24 @@ const envTex=(()=>{
   bar(70,34,120,44,1); bar(190,54,90,26,.65); bar(130,104,150,22,.4);
   const t=new THREE.CanvasTexture(c); t.mapping=THREE.EquirectangularReflectionMapping; return t;
 })();
-const pmrem=new THREE.PMREMGenerator(renderer);
-const envRT=pmrem.fromEquirectangular(envTex);
-const ENV=envRT.texture;
+/* PMREM is an ENHANCEMENT: if it throws or yields nothing the jacks must still light */
+let ENV=null;
+try{ const pmrem=new THREE.PMREMGenerator(renderer);
+     ENV=pmrem.fromEquirectangular(envTex).texture; pmrem.dispose(); }
+catch(e){ console.warn('[gl] PMREM env unavailable, direct lights only:',e&&e.message); }
 
 /* ================= HERO: JACK CLUSTER ================= */
 const scene=new THREE.Scene();
-scene.fog=new THREE.Fog(0x0a0a12,9,26);
+/* near plane pushed past the far corners of the cluster (camera z=9.5, jacks reach ~14) */
+scene.fog=new THREE.Fog(0x0a0a12,14,40);
 const camera=new THREE.PerspectiveCamera(45,2,.1,100);
 camera.position.set(0,0,9.5);
-scene.add(new THREE.HemisphereLight(0xd8d8ff,0x0a0a12,1.1));
-const kl=new THREE.DirectionalLight(0xffffff,2.2); kl.position.set(4,6,7); scene.add(kl);
-const kl2=new THREE.DirectionalLight(0x9a7bff,1.1); kl2.position.set(-6,-3,4); scene.add(kl2);
+/* r155+ lights are physically correct (~1/PI vs legacy). These four ALONE must make the
+   jacks readable on #0A0A12 — never rely on scene.environment / envMap for visibility. */
+scene.add(new THREE.HemisphereLight(0xd8d8ff,0x1a1a28,2.0));
+const kl=new THREE.DirectionalLight(0xffffff,3.4); kl.position.set(4,6,7); scene.add(kl);
+const kl2=new THREE.DirectionalLight(0x9a7bff,1.8); kl2.position.set(-6,-3,4); scene.add(kl2);
+const kl3=new THREE.DirectionalLight(0xffffff,1.2); kl3.position.set(-2,2,-6); scene.add(kl3);
 
 const NJ=56;
 const capGeo=new THREE.CapsuleGeometry(.26,.62,6,14);
@@ -1431,7 +1460,7 @@ GL.stats=()=>({jacks:jacks.length,capMeshes:capIMs.length,
   capInst:capIMs.reduce((a,m)=>a+m.count,0),discInst:discIM.count,
   planes:planes.length,sparkles:SPK,rings:RINGS,dbw:renderer.getContext().drawingBufferWidth});
 GL.dbg={jacks,capIMs,blob,jelly,jellyMat,planes,tCam,spk,trail,trailPts,orb,scene,tScene,oScene,
-  world:()=>world};
+  renderer,camera,env:()=>!!ENV,world:()=>world};
 
 const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _s=new THREE.Vector3(), _t=new THREE.Matrix4();
 GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
@@ -1444,7 +1473,8 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
 
   /* ---------- HERO (scissored to the dark panel) ---------- */
   if(heroOn && R_panel){
-    if(document.getElementById('pre').classList.contains('wipe')){
+    const pc=document.getElementById('pre').classList;
+    if(pc.contains('wipe')||pc.contains('gone')){
       if(!introAt) introAt=now;
       for(const j of jacks){ if(j.sc>=1) continue;
         const p=cl((now-introAt-j.born)/700,0,1), c1=1.70158, c3=c1+1;
@@ -1487,11 +1517,12 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
     capIMs.forEach(m=>m.instanceMatrix.needsUpdate=true);
     discIM.instanceMatrix.needsUpdate=true;
 
-    /* scissor GL to the panel rect (canvas stays fullscreen) */
-    const dpr=renderer.getPixelRatio();
+    /* scissor GL to the panel rect (canvas stays fullscreen).
+       three multiplies setScissor/setViewport by pixelRatio internally — pass CSS px.
+       Pre-multiplying here squared the DPR and threw the hero off the panel at 1.25/1.5. */
     const top=R_panel.y-scrollY;
-    const x=Math.round(R_panel.x*dpr), y=Math.round((innerHeight-(top+R_panel.h))*dpr);
-    const w=Math.round(R_panel.w*dpr), h=Math.round(R_panel.h*dpr);
+    const x=Math.round(R_panel.x), y=Math.round(innerHeight-(top+R_panel.h));
+    const w=Math.round(R_panel.w), h=Math.round(R_panel.h);
     if(w>0&&h>0){
       camera.aspect=R_panel.w/R_panel.h; camera.updateProjectionMatrix();
       renderer.setScissorTest(true);
@@ -1550,7 +1581,9 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
   if(any||jelly.visible||trail.visible) renderer.render(oScene,oCam);
 };
 }catch(err){
-  console.warn('[gl] disabled, DOM experience continues:', err && err.message);
+  /* loud on purpose: a swallowed real-GPU exception used to look like "black panel" */
+  console.error('[gl] DISABLED, DOM experience continues:', err);
+  document.body.classList.remove('hasgl');
   document.body.classList.add('nogl');
 }
 </script>
