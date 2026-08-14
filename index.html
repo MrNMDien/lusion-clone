@@ -1093,36 +1093,42 @@ catch(e){ console.warn('[gl] PMREM env unavailable, direct lights only:',e&&e.me
 
 /* ================= HERO: JACK CLUSTER ================= */
 const scene=new THREE.Scene();
-/* near plane pushed past the far corners of the cluster (camera z=9.5, jacks reach ~14) */
-scene.fog=new THREE.Fog(0x0a0a12,14,40);
+/* depth falloff so the back of the pile recedes like the reference */
+scene.fog=new THREE.Fog(0x0a0a12,11,26);
 const camera=new THREE.PerspectiveCamera(45,2,.1,100);
 camera.position.set(0,0,9.5);
-/* r155+ lights are physically correct (~1/PI vs legacy). These four ALONE must make the
-   jacks readable on #0A0A12 — never rely on scene.environment / envMap for visibility. */
-scene.add(new THREE.HemisphereLight(0xd8d8ff,0x1a1a28,2.0));
-const kl=new THREE.DirectionalLight(0xffffff,3.4); kl.position.set(4,6,7); scene.add(kl);
-const kl2=new THREE.DirectionalLight(0x9a7bff,1.8); kl2.position.set(-6,-3,4); scene.add(kl2);
-const kl3=new THREE.DirectionalLight(0xffffff,1.2); kl3.position.set(-2,2,-6); scene.add(kl3);
+/* r155+ lights are physically correct (~1/PI vs legacy). These ALONE must make the jacks
+   readable on #0A0A12 — never rely on envMap for visibility. Key is UPPER-LEFT: every
+   specular streak in the reference runs down-right from an upper-left source. */
+scene.add(new THREE.HemisphereLight(0xccd4ff,0x14141f,1.7));
+const kl =new THREE.DirectionalLight(0xffffff,5.0); kl .position.set(-5, 7, 6); scene.add(kl);
+const kl2=new THREE.DirectionalLight(0xc2d2ff,2.8); kl2.position.set(-7, 4,-3); scene.add(kl2);
+const kl3=new THREE.DirectionalLight(0xffffff,1.8); kl3.position.set( 5,-2, 4); scene.add(kl3);
+const kl4=new THREE.DirectionalLight(0x8f7dff,1.3); kl4.position.set( 2, 3,-7); scene.add(kl4);
 
-/* ~1.7x bigger, half the count: chunkier read, and 28 bodies = 378 pairs not 1540 */
-const NJ=28;
-/* slim shaft + barely-flared end caps -> crisp plus silhouette, no blobby plates */
-const CAP_R=.34, CAP_L=1.12, DISC_R=CAP_R*1.05, DISC_H=.077;
-const capGeo=new THREE.CapsuleGeometry(CAP_R,CAP_L,6,14);
-const discGeo=new THREE.CylinderGeometry(DISC_R,DISC_R,DISC_H,16);
-const jackMat=new THREE.MeshPhysicalMaterial({roughness:.25,metalness:.0,clearcoat:.8,
-  clearcoatRoughness:.18,envMap:ENV,envMapIntensity:1.0});
-const discMat=new THREE.MeshPhysicalMaterial({color:0x14141b,roughness:.35,metalness:0,
-  clearcoat:.5,envMap:ENV,envMapIntensity:.6});
+const NJ=38;
+/* Reference jacks are CYLINDER arms with a flat end face carrying a small dark bore
+   (hollow-tube read), NOT capsules with plate caps. Arm stays ~3:1 half-length:radius. */
+const ARM_R=.35, ARM_HALF=1.05, HOLE_R=ARM_R*.36, HOLE_H=.03;
+const capGeo=new THREE.CylinderGeometry(ARM_R,ARM_R,ARM_HALF*2,20);
+const discGeo=new THREE.CylinderGeometry(HOLE_R,HOLE_R,HOLE_H,14);
+/* candy gloss: sharp clearcoat highlights, not the old matte read */
+const jackMat=new THREE.MeshPhysicalMaterial({roughness:.12,metalness:0,clearcoat:1,
+  clearcoatRoughness:.03,envMap:ENV,envMapIntensity:1.1});
+/* the bore: near-black, matte, never wider than the arm */
+const discMat=new THREE.MeshPhysicalMaterial({color:0x0B0B10,roughness:.5,metalness:0,
+  clearcoat:.25,envMap:ENV,envMapIntensity:.2});
 const discIM=new THREE.InstancedMesh(discGeo,discMat,NJ*6);
 discIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 scene.add(discIM);
 
-/* local arm transforms: capsule is Y-aligned by default */
+/* local arm transforms: cylinder is Y-aligned by default */
 const ARM=[new THREE.Matrix4(),
   new THREE.Matrix4().makeRotationZ(Math.PI/2),
   new THREE.Matrix4().makeRotationX(Math.PI/2)];
-const CAPEND=CAP_L/2+CAP_R;
+/* bore sits a hair PROUD of the flat end face — recessed would be hidden by the cap,
+   flush would z-fight */
+const CAPEND=ARM_HALF+.006;
 const DISC=[];
 [[0,1,0],[0,-1,0],[1,0,0],[-1,0,0],[0,0,1],[0,0,-1]].forEach(a=>{
   const m=new THREE.Matrix4();
@@ -1130,15 +1136,22 @@ const DISC=[];
   m.setPosition(a[0]*CAPEND,a[1]*CAPEND,a[2]*CAPEND);
   DISC.push(m);
 });
-const COLORS=[0x3B23D6,0xEFEFF4,0x17171E];
+/* deep ultramarine blue-violet / warm off-white / glossy near-black */
+const COLORS=[0x3623C8,0xF4F3F8,0x131318];
 
 /* ======== RIGID-BODY TOY PHYSICS (no spring-to-home, no float) ========
    Bounding-sphere bodies in a frustum-fitted box: gravity -> pile on the floor,
    cursor sweep plows them up, they tumble, rain back down, settle, sleep. */
-const RJ=.86;                                   // collision sphere ~ the arm reach
+const RJ=1.00;                                  // collision sphere just under the arm reach
 const G=-26, REST=.35, FLOOR_REST=.30, FRIC=.85, FLOOR_FRIC=.86,
-      VMAX=60, STIR_MAX=13, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3;
-const BOX={hw:8,hh:4,zn:-1.7,zf:1.3,spawned:false};
+      /* STIR_MAX peaks the toss just under the (shorter) frame ceiling: 11^2/2G = 2.3u rise */
+      VMAX=60, STIR_MAX=11, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3,
+      /* These are fist-sized SOLID toys: high moment of inertia, so angular gains are
+         small and hard-capped. WMAX 5 rad/s = 0.8 rev/s = 4.6 deg per 16ms frame.
+         Damping is frame-rate independent: e^-kh, k=0.30 airborne (~.995/frame, tumble
+         persists), k=6.3 in contact (~.90/frame, rolling friction calms the pile). */
+      WMAX=5, W_AIR=.30, W_TOUCH=6.3;
+const BOX={hw:8,hh:4,zn:-2.8,zf:1.6,spawned:false};
 const jacks=[];
 for(let i=0;i<NJ;i++) jacks.push({ci:i%3,
   pos:new THREE.Vector3(), vel:new THREE.Vector3(), spin:new THREE.Vector3(),
@@ -1148,14 +1161,21 @@ for(let i=0;i<NJ;i++) jacks.push({ci:i%3,
 const _e=new THREE.Euler(), _qs=new THREE.Quaternion();
 const wake=j=>{ j.sleep=false; j.still=0; };
 function respawn(j){
-  j.pos.set((Math.random()-.5)*BOX.hw*1.6, BOX.hh+1+Math.random()*3,
-            BOX.zn+Math.random()*(BOX.zf-BOX.zn));
+  const z=BOX.zn+Math.random()*(BOX.zf-BOX.zn);
+  /* clear the frustum AT THIS DEPTH — the view is taller at the back, so a fixed spawn
+     height pops far bodies into frame instead of raining them in from above */
+  const top=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-z);
+  j.pos.set((Math.random()-.5)*BOX.hw*1.6, top+RJ+Math.random()*3, z);
   j.vel.set(0,0,0);
   j.spin.set((Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2);
   j.s=1; j.sv=0; wake(j);
 }
 function fitBounds(aspect){
-  const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.position.z, hw=hh*aspect;
+  /* fit the frustum at the NEAREST body plane (z = zf), not at z=0: sized at z=0 the
+     front row pokes outside the visible frame. Fitting at zf makes the walls the frame
+     edge for the closest bodies, so a flung jack always bounces IN VIEW. */
+  const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-BOX.zf),
+        hw=hh*aspect;
   if(Math.abs(hw-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
     BOX.hw=hw; BOX.hh=hh;
     /* the walls just moved: sleepers skip the wall clamp, so a resize would strand
@@ -1189,21 +1209,34 @@ function stir(h){
     j.vel.y=lp(oy, sp*.32   +dy*inv*sp*.15, k);   // <- the upward bias ("bới tung")
     j.vel.z=lp(oz, uz*sp*.35+dz*inv*sp*.30, k);
     if(j.vel.lengthSq()>STIR_MAX*STIR_MAX) j.vel.setLength(STIR_MAX);
-    const dv=Math.hypot(j.vel.x-ox,j.vel.y-oy,j.vel.z-oz);
+    const vx=j.vel.x-ox, vy=j.vel.y-oy, vz=j.vel.z-oz;
+    const dv=Math.hypot(vx,vy,vz);
     if(dv<.05) continue;                          // hovering must not wake the pile
-    const sw=Math.min(9,dv*.55);
-    j.spin.x+=(Math.random()-.5)*sw;
-    j.spin.y+=(Math.random()-.5)*sw;
-    j.spin.z+=(Math.random()-.5)*sw;
+    addSpin(j, dy*vz-dz*vy, dz*vx-dx*vz, dx*vy-dy*vx, Math.min(2.5,dv*.12), 2.5);
     j.sv-=Math.min(.5,dv*.02);
     wake(j);
   }
+}
+
+/* Torque about a REAL axis (r x impulse), magnitude bounded, result hard-capped.
+   The old code re-randomised the spin axis every frame and accumulated unbounded —
+   that is the helicopter whirl: buzzy axis jitter reads as fake, not as tumble. */
+function addSpin(j,ax,ay,az,mag,cap){
+  const l=Math.hypot(ax,ay,az); if(l<1e-4||mag<1e-4) return;
+  const k=mag/l;
+  j.spin.x+=ax*k; j.spin.y+=ay*k; j.spin.z+=az*k;
+  /* `cap` lets the cursor cap its OWN contribution lower than a real collision's:
+     a drag re-impulses the same body every frame, so without it even a slow sweep
+     ratchets up to the global cap. Impacts may legitimately spin faster. */
+  const c=cap||WMAX;
+  if(j.spin.lengthSq()>c*c) j.spin.setLength(c);
 }
 
 function physSub(h){
   const fy=-BOX.hh+RJ, wx=BOX.hw-RJ, D=RJ*2;
   for(const j of jacks){
     if(j.wait||j.sleep) continue;
+    j.touch=false;                     // set by floor/pair contact -> picks the damping rate
     j.vel.y+=G*h;
     if(j.vel.lengthSq()>VMAX*VMAX) j.vel.setLength(VMAX);
     j.pos.addScaledVector(j.vel,h);
@@ -1222,6 +1255,7 @@ function physSub(h){
       /* only a REAL impact wakes a sleeper — resting overlap must not re-wake the pile */
       if(-vn>.5||pen>RJ*.8){ wake(A); wake(C); }
       const wa=A.sleep?0:1, wc=C.sleep?0:1, wt=wa+wc; if(!wt) continue;
+      if(wa)A.touch=true; if(wc)C.touch=true;
       const cor=Math.max(0,pen-.02)*.8/wt;   // slop: below 2cm overlap, leave it alone
       if(wa){ A.pos.x-=nx*cor; A.pos.y-=ny*cor; A.pos.z-=nz*cor; }
       if(wc){ C.pos.x+=nx*cor; C.pos.y+=ny*cor; C.pos.z+=nz*cor; }
@@ -1233,15 +1267,18 @@ function physSub(h){
       const tn=tx*nx+ty*ny+tz*nz; tx-=tn*nx; ty-=tn*ny; tz-=tn*nz;
       const tl=Math.hypot(tx,ty,tz);
       if(tl>1e-4){
-        const k=(1-FRIC)/wt;
+        /* STATIC friction on a resting contact. Sliding friction alone (15%/contact) let
+           bodies stacked ON other bodies creep forever just above the sleep threshold —
+           the floor has FLOOR_FRIC, a body resting on a body had nothing equivalent. */
+        const k=(1-((-vn<REST_VN)?.25:FRIC))/wt;
         /* tumble only from a REAL impulse — a resting contact must not trickle spin
            into the pile, or nothing ever gets under the sleep threshold */
-        const sw=(-vn>REST_VN)?Math.min(6,tl*.9)*.5:0;
+        /* bounded MAGNITUDE. The old form scaled as tl^2 (axis length x gain) and hit
+           ~18 rad/s on a hard hit; addSpin normalises the axis and caps the result. */
+        const sw=(-vn>REST_VN)?Math.min(1.5,tl*.15):0;
         const cx=ny*tz-nz*ty, cy=nz*tx-nx*tz, cz=nx*ty-ny*tx;
-        if(wa){ A.vel.x+=tx*k; A.vel.y+=ty*k; A.vel.z+=tz*k;
-                A.spin.x+=cx*sw; A.spin.y+=cy*sw; A.spin.z+=cz*sw; }
-        if(wc){ C.vel.x-=tx*k; C.vel.y-=ty*k; C.vel.z-=tz*k;
-                C.spin.x-=cx*sw; C.spin.y-=cy*sw; C.spin.z-=cz*sw; }
+        if(wa){ A.vel.x+=tx*k; A.vel.y+=ty*k; A.vel.z+=tz*k; addSpin(A, cx, cy, cz, sw); }
+        if(wc){ C.vel.x-=tx*k; C.vel.y-=ty*k; C.vel.z-=tz*k; addSpin(C,-cx,-cy,-cz, sw); }
       }
       const sq=Math.min(.5,-vn*.045);
       if(sq>.02){ if(wa)A.sv-=sq; if(wc)C.sv-=sq; }
@@ -1254,11 +1291,11 @@ function physSub(h){
       respawn(j); continue; }
     if(j.sleep) continue;
     if(j.pos.y<fy){                                  // FLOOR
-      j.pos.y=fy;
+      j.pos.y=fy; j.touch=true;
       if(j.vel.y<0){
         const vy=-j.vel.y;
         j.vel.y = vy>REST_VN ? vy*FLOOR_REST : 0;
-        j.vel.x*=FLOOR_FRIC; j.vel.z*=FLOOR_FRIC; j.spin.multiplyScalar(.9);
+        j.vel.x*=FLOOR_FRIC; j.vel.z*=FLOOR_FRIC;
         if(vy>1.5) j.sv-=Math.min(.6,vy*.04);
       }
     }
@@ -1266,9 +1303,10 @@ function physSub(h){
     else if(j.pos.x<-wx){ j.pos.x=-wx; if(j.vel.x<0) j.vel.x*=-REST; }
     if(j.pos.z>BOX.zf){ j.pos.z=BOX.zf; if(j.vel.z>0) j.vel.z*=-REST; }
     else if(j.pos.z<BOX.zn){ j.pos.z=BOX.zn; if(j.vel.z<0) j.vel.z*=-REST; }
-    /* airborne: keep the tumble alive. slow/at rest: kill it fast so the pile is calm */
+    /* airborne: graceful tumble persists. in contact: rolling friction kills it fast. */
+    j.spin.multiplyScalar(Math.exp(-(j.touch?W_TOUCH:W_AIR)*h));
+    if(j.spin.lengthSq()>WMAX*WMAX) j.spin.setLength(WMAX);
     const slow=j.vel.lengthSq()<SLEEP_V*SLEEP_V;
-    j.spin.multiplyScalar(1-Math.min(.6,(slow?9:.85)*h));
     if(slow && j.spin.lengthSq()<SLEEP_W*SLEEP_W) j.still+=h;
     else j.still=0;
     if(j.still>SLEEP_T){ j.sleep=true; j.vel.set(0,0,0); j.spin.set(0,0,0); j.s=1; j.sv=0; }
@@ -1302,12 +1340,8 @@ const capIMs=groups.map((g,ci)=>{
   scene.add(m); return m;
 });
 
-/* the invisible dragged sphere — barely-there dark glass */
-const blob=new THREE.Mesh(new THREE.SphereGeometry(1.6,32,24),
-  new THREE.MeshPhysicalMaterial({color:0x0a0a12,roughness:.05,metalness:0,transparent:true,
-    opacity:.12,clearcoat:1,envMap:ENV,envMapIntensity:1.6}));
-scene.add(blob);
-
+/* The cursor sphere is PURE PHYSICS — no mesh. The old "barely-there dark glass" ball
+   read as an ugly dark bubble floating over the panel. `world` is the collider. */
 const ndc=new THREE.Vector2(-2,-2);
 let world=new THREE.Vector3(999,999,0), heroOn=true;
 GL.pointer=e=>{
@@ -1330,10 +1364,12 @@ addEventListener('pointerdown',()=>{
     const dx=j.pos.x-world.x, dy=j.pos.y-world.y, dz=j.pos.z-world.z;
     const d=Math.hypot(dx,dy,dz); if(d>R) continue;
     const f=(1-d/R)*12, inv=1/Math.max(.35,d);
+    const ox=j.vel.x, oy=j.vel.y, oz=j.vel.z;
     j.vel.x+=dx*inv*f; j.vel.y+=dy*inv*f*.5+f*1.25; j.vel.z+=dz*inv*f*.7;
-    j.spin.x+=(Math.random()-.5)*f*2.4;
-    j.spin.y+=(Math.random()-.5)*f*2.4;
-    j.spin.z+=(Math.random()-.5)*f*2.4;
+    if(j.vel.lengthSq()>STIR_MAX*STIR_MAX) j.vel.setLength(STIR_MAX);  // same ceiling as the sweep
+    addSpin(j, dy*(j.vel.z-oz)-dz*(j.vel.y-oy),
+               dz*(j.vel.x-ox)-dx*(j.vel.z-oz),
+               dx*(j.vel.y-oy)-dy*(j.vel.x-ox), Math.min(2.5,f*.16), 2.5);
     j.sv-=Math.min(.6,f*.05); wake(j);
   }
 });
@@ -1620,7 +1656,7 @@ GL.ok=true;
 GL.stats=()=>({jacks:jacks.length,capMeshes:capIMs.length,
   capInst:capIMs.reduce((a,m)=>a+m.count,0),discInst:discIM.count,
   planes:planes.length,sparkles:SPK,rings:RINGS,dbw:renderer.getContext().drawingBufferWidth});
-GL.dbg={jacks,capIMs,blob,jelly,jellyMat,planes,tCam,spk,trail,trailPts,orb,scene,tScene,oScene,
+GL.dbg={jacks,capIMs,jelly,jellyMat,planes,tCam,spk,trail,trailPts,orb,scene,tScene,oScene,
   renderer,camera,env:()=>!!ENV,world:()=>world,
   BOX,RJ,setCursor:(x,y)=>world.set(x,y,0),
   awake:()=>jacks.filter(j=>!j.sleep&&!j.wait).length};
@@ -1638,7 +1674,6 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
   if(heroOn && R_panel){
     const pc=document.getElementById('pre').classList;
     if(!introAt&&(pc.contains('wipe')||pc.contains('gone'))) introAt=now;
-    if(world.x<900) blob.position.lerp(world,.25);
     if(!RMx){ camera.position.x=lp(camera.position.x,ndc.x*.3,.05);
       camera.position.y=lp(camera.position.y,ndc.y*.3,.05); camera.lookAt(0,0,0); }
 
