@@ -693,7 +693,13 @@ function ribbon(svgId, idx, d, color){
   p.setAttribute('d',d); p.setAttribute('stroke',color);
   const len=p.getTotalLength();
   p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
-  RIBBONS.push({el:svg, path:p, len, p:0, host:svg.parentElement});
+  /* dau but: cham bam dau net dang ve. Dung ELLIPSE vi svg keo gian
+     preserveAspectRatio=none — circle se meo, phai bu rx/ry theo scale (do o measure) */
+  const tip=document.createElementNS('http://www.w3.org/2000/svg','ellipse');
+  tip.setAttribute('fill',color); tip.style.opacity='0';
+  svg.appendChild(tip);
+  RIBBONS.push({el:svg, path:p, len, p:0, host:svg.parentElement, tip,
+    vbw:svg.viewBox.baseVal.width, vbh:svg.viewBox.baseVal.height, sx:1, sy:1});
 }
 /* A: loops a full circle AROUND the reel thumb zone then trails off right/down */
 ribbon('ribbonA',0,
@@ -739,7 +745,8 @@ function measure(){
   const tz=document.getElementById('reelZone').getBoundingClientRect();
   R_thumb={x:ts.left,y:ts.top,w:ts.width,h:ts.height};
   R_zone ={x:tz.left,y:tz.top,w:tz.width,h:tz.height};
-  RIBBONS.forEach(r=>{ const b=r.host.getBoundingClientRect(); r.y=b.top; r.h=b.height; });
+  RIBBONS.forEach(r=>{ const b=r.host.getBoundingClientRect(); r.y=b.top; r.h=b.height;
+    r.sx=Math.max(.01,b.width/r.vbw); r.sy=Math.max(.01,b.height/r.vbh); });
 
   app.style.transform=prev;
   docH=app.scrollHeight;
@@ -827,6 +834,16 @@ addEventListener('pointermove',e=>{ px=e.clientX; py=e.clientY; GL.pointer(e); }
 const reelMorph=document.getElementById('reelMorph'), rmWords=document.getElementById('rmWords'),
       rmChip=document.getElementById('rmChip'), rmMarks=document.getElementById('rmMarks');
 reelMorph.addEventListener('click',e=>{e.preventDefault();openReel(reelMorph);});
+/* re chuot tren card da phong -> song loang tu DUNG diem cham (uv y lat nhu GL.ripple) */
+let ripLX=0, ripLY=0;
+reelMorph.addEventListener('pointermove',e=>{
+  if(!(RS.e>.6)||!GL.reelRippleAt) return;
+  if(Math.hypot(e.clientX-ripLX,e.clientY-ripLY)<26) return;
+  ripLX=e.clientX; ripLY=e.clientY;
+  const r=reelMorph.getBoundingClientRect();
+  GL.reelRippleAt((e.clientX-r.left)/Math.max(1,r.width),
+                  1-(e.clientY-r.top)/Math.max(1,r.height), .6);
+},{passive:true});
 document.querySelectorAll('.card').forEach((c,i)=>{
   c.addEventListener('click',e=>e.preventDefault());
   c.addEventListener('pointerenter',()=>{ if(GL.hover) GL.hover(i,1); });
@@ -861,7 +878,7 @@ const stage=document.getElementById('stage'), stageText=document.getElementById(
       tablet=document.getElementById('tablet'), takeSticky=document.getElementById('takeSticky'),
       endSticky=document.getElementById('endSticky'), footer=document.getElementById('footer'),
       ctaLink=document.getElementById('ctaLink');
-let frame=0, lastNow=0, heroVis=1, takeP=0, morphP=0, phase='-', flashed=false, stageOn=0, stickerOn=0;
+let frame=0, lastNow=0, heroVis=1, takeP=0, morphP=0, phase='-', flashed=false, stageOn=0, stickerOn=0, rbw=0;
 
 function raf(now){
   requestAnimationFrame(raf);
@@ -892,11 +909,19 @@ function raf(now){
   }
 
   /* ---- ribbons: dashoffset scrubbed by section progress ---- */
+  rbw=lerp(rbw,clamp(Math.abs(vel)*.35,0,10),.12);   /* net phap phong theo toc do cuon */
   for(const rb of RIBBONS){
     /* scrub suot chieu dai section (user chot 18/08): xuong ve tiep, len RUT lai */
     const raw=clamp((smooth+vh*0.9-rb.y)/(rb.h*1.05),0,1);
     rb.p=lerp(rb.p,raw,.12);
     rb.path.style.strokeDashoffset=(rb.len*(1-rb.p)).toFixed(1);
+    rb.path.style.strokeWidth=(14+rbw).toFixed(1);
+    /* dau but bam dau net; an khi chua ve gi / da ve xong het */
+    const pt=rb.path.getPointAtLength(rb.len*rb.p);
+    rb.tip.setAttribute('cx',pt.x.toFixed(1)); rb.tip.setAttribute('cy',pt.y.toFixed(1));
+    rb.tip.setAttribute('rx',((10+rbw*.4)/rb.sx).toFixed(2));
+    rb.tip.setAttribute('ry',((10+rbw*.4)/rb.sy).toFixed(2));
+    rb.tip.style.opacity=clamp(Math.min(rb.p,1-rb.p)*26,0,1).toFixed(2);
   }
 
   /* ---- statement scrub ---- */
@@ -1538,6 +1563,8 @@ const jcen={x:0,y:0,vx:0,vy:0};
 let jInit=false;
 GL.reelRipple=()=>{ jellyMat.uniforms.u_rip.value=1; jellyMat.uniforms.u_ripT.value=0;
   jellyMat.uniforms.u_ripPos.value.set(.5,.5); };
+GL.reelRippleAt=(u,v,a)=>{ const q=jellyMat.uniforms;
+  q.u_ripPos.value.set(u,v); q.u_rip.value=Math.max(q.u_rip.value,a||.6); q.u_ripT.value=0; };
 GL.reelSync=(R,scrollY,dt)=>{
   const iw=innerWidth, ih=innerHeight;
   const cyView=R.cy-scrollY;
