@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Preview — ribbon scrub + card thạch gợn sóng</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<style>
+:root{
+  --bg:#F2F0FA; --ink:#111;
+  --ink-50:rgba(17,17,17,.5); --ink-25:rgba(17,17,17,.25);
+  --violet:#5B2EE5; --duo-deep:#4416CC; --duo-light:#D9CCFF;
+  --pad:40px; --e-out:cubic-bezier(.22,1,.36,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",system-ui,sans-serif;overflow-x:hidden}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.wrap{padding:0 var(--pad)}
+.h2{font-size:5vw;font-weight:600;letter-spacing:-.035em;line-height:1.05;margin:0}
+.p{font-size:15px;line-height:1.6;color:var(--ink-50);max-width:420px;margin:0}
+
+#topbar{position:fixed;left:0;top:0;right:0;z-index:5;display:flex;align-items:center;
+  justify-content:space-between;padding:18px var(--pad);pointer-events:none}
+#brand{font-weight:700;font-size:18px}
+#knobs{display:flex;gap:18px;pointer-events:auto;align-items:center}
+#knobs .grp{display:flex;gap:6px;align-items:center;background:#fff;border:1px solid var(--ink-25);
+  border-radius:999px;padding:4px 6px 4px 12px}
+#knobs .grp b{font-size:11px;font-weight:500;color:var(--ink-50);white-space:nowrap}
+#knobs button{font:inherit;font-size:12px;padding:5px 11px;border-radius:999px;border:0;
+  background:transparent;color:var(--ink);cursor:pointer}
+#knobs button.on{background:var(--violet);color:#fff}
+
+.spacer{height:70vh;display:grid;place-items:center;color:var(--ink-50)}
+
+#about{position:relative;padding:6vh 0 8vh}
+.ribbon{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+.ribbon path{fill:none;stroke-width:14;stroke-linecap:round;stroke-linejoin:round}
+
+#reelRow{display:flex;gap:50px;align-items:flex-start;padding-top:2vh;position:relative;z-index:1}
+#reelLeft{width:30vw;flex:0 0 auto}
+#reelThumbSlot{width:100%;aspect-ratio:16/9;pointer-events:none}
+#reelRight{flex:1;padding-top:10px}
+.pill{display:inline-flex;align-items:center;gap:10px;border:1px solid var(--ink-25);
+  border-radius:999px;padding:12px 22px;text-decoration:none;color:inherit}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--violet)}
+
+#reelZone{position:relative;width:100%;aspect-ratio:16/9;margin:9vh 0 4vh}
+#reelMorph{position:absolute;inset:0;transform-origin:0 0;cursor:pointer;will-change:transform}
+/* canvas TRÀN ra ngoài card 16% mỗi chiều — mép thạch cong ra ngoài rect gốc,
+   canvas ôm sát card là sóng bị cắt cụt */
+#rmGL{position:absolute;left:-16%;top:-16%;width:132%;height:132%;pointer-events:none}
+.rm-fallback{position:absolute;inset:0;border-radius:20px;
+  background:linear-gradient(135deg,var(--duo-light),var(--duo-deep))}
+.hasgl .rm-fallback{display:none}
+#rmWords{position:absolute;left:0;top:50%;width:100%;transform:translateY(-50%);
+  display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:3;
+  color:#fff;font-size:var(--rw,42px);font-weight:600;letter-spacing:-.02em;opacity:0}
+#rmWords .w{white-space:nowrap}
+#rmChip{width:0;height:0;border-radius:100px;background:#fff;display:grid;place-items:center;
+  overflow:hidden;color:#111;flex:0 0 auto;margin:0 var(--gap,10px)}
+#rmMarks{position:absolute;inset:-26px;z-index:4;pointer-events:none;opacity:0;transition:opacity .4s var(--e-out)}
+#rmMarks span{position:absolute;color:var(--ink-25);font-size:13px;line-height:1}
+#reelGhost{position:absolute;left:0;right:0;top:calc(100% + 10px);display:flex;
+  justify-content:space-between;padding:0 6%;font-size:7vw;font-weight:600;letter-spacing:-.03em;
+  color:rgba(17,17,17,.09);pointer-events:none;line-height:1}
+
+@media(max-width:900px){
+  :root{--pad:20px}
+  #reelRow{flex-direction:column;gap:24px} #reelLeft{width:100%}
+  #knobs{display:none}
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span id="brand">LUSION</span>
+  <div id="knobs">
+    <div class="grp"><b>Max size</b>
+      <button data-k="m" data-v=".72">72%</button>
+      <button data-k="m" data-v=".8">80%</button>
+      <button data-k="m" data-v=".9">90%</button>
+    </div>
+    <div class="grp"><b>Độ dẻo</b>
+      <button data-k="j" data-v=".7">Nhẹ</button>
+      <button data-k="j" data-v="1">Vừa</button>
+      <button data-k="j" data-v="1.4">Mạnh</button>
+    </div>
+  </div>
+</div>
+
+<div class="spacer"><span class="mono">Cuộn xuống — line vẽ theo scroll (2 chiều), card thạch gợn sóng khi phóng ra</span></div>
+
+<section id="about" class="wrap">
+  <svg class="ribbon" id="ribbonA" viewBox="0 0 1000 900" preserveAspectRatio="none"><path/></svg>
+  <h2 class="h2" style="position:relative;z-index:1">Bold Ideas,<br>Brought to Life</h2>
+  <div id="reelRow">
+    <div id="reelLeft"><div id="reelThumbSlot"></div></div>
+    <div id="reelRight">
+      <p class="p">We combine design, motion, 3D, and development to create digital
+        experiences that feel visually striking and technically seamless. From campaign launches to
+        immersive brand worlds, we build work that captures attention and invites interaction.</p>
+      <div style="margin-top:26px">
+        <a class="pill"><i class="dot"></i><span class="mono">Our Approach</span></a>
+      </div>
+    </div>
+  </div>
+  <div id="reelZone">
+    <div id="reelMorph">
+      <div class="rm-fallback"></div>
+      <canvas id="rmGL"></canvas>
+      <div id="rmWords"><span class="w">PLAY</span><span id="rmChip">▶</span><span class="w">REEL</span></div>
+    </div>
+    <div id="rmMarks"><span style="left:0;top:0">+</span><span style="right:0;top:0">×</span>
+      <span style="left:0;bottom:0">×</span><span style="right:0;bottom:0">+</span>
+      <span style="left:50%;top:0">+</span><span style="left:50%;bottom:0">+</span></div>
+    <div id="reelGhost"><span>PLAY</span><span>REEL</span></div>
+  </div>
+</section>
+
+<div class="spacer"><span class="mono">Cuộn ngược lên — line rút lại, card co về cũng dẻo y vậy</span></div>
+
+<script>
+const Q=new URLSearchParams(location.search);
+const MAXK=parseFloat(Q.get('m'))||.8;
+const JELLY=parseFloat(Q.get('j'))||1;
+document.querySelectorAll('#knobs button').forEach(b=>{
+  const cur=b.dataset.k==='m'?MAXK:JELLY;
+  if(Math.abs(parseFloat(b.dataset.v)-cur)<.001) b.classList.add('on');
+  b.onclick=()=>{ Q.set(b.dataset.k,b.dataset.v); location.search=Q.toString(); };
+});
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+const Q=new URLSearchParams(location.search);
+const MAXK=parseFloat(Q.get('m'))||.8;
+const JELLY=parseFloat(Q.get('j'))||1;
+
+const clamp=(v,a,b)=>v<a?a:v>b?b:v, lerp=(a,b,t)=>a+(b-a)*t;
+function spr(x,v,t,k,z,dt){ const w=Math.sqrt(k); v+=(k*(t-x)-2*z*w*v)*dt; return [x+v*dt,v]; }
+
+/* ---- ribbon: tiến độ bám thẳng scroll → tự chạy 2 chiều ---- */
+const rrp=document.querySelector('#ribbonA path');
+rrp.setAttribute('d',
+  'M 250 60 C 120 120 60 240 130 330 C 200 420 360 430 420 350 C 480 270 400 150 280 170 '+
+  'C 170 190 150 320 240 380 C 380 470 620 430 720 520 C 820 610 880 720 980 760');
+rrp.setAttribute('stroke','#5B2EE5');
+const rlen=rrp.getTotalLength();
+rrp.style.strokeDasharray=rlen; rrp.style.strokeDashoffset=rlen;
+
+const about=document.getElementById('about'), zone=document.getElementById('reelZone'),
+      slot=document.getElementById('reelThumbSlot'), morph=document.getElementById('reelMorph'),
+      rmWords=document.getElementById('rmWords'), rmChip=document.getElementById('rmChip'),
+      rmMarks=document.getElementById('rmMarks');
+
+/* ---- card = plane WebGL, THẠCH TRONG MẶT PHẲNG (soi từ video Lusion thật):
+   không twist 3D — đỉnh lưới dịch chuyển 2D theo VẬN TỐC:
+   ① kéo lết: cả tấm hơi tụt sau, GÓC tụt nhiều nhất -> mép cong theo hướng chạy
+   ② phình gối: phóng nhanh là 4 mép phồng ra, co lại là hóp vào
+   ③ sóng đáp: tới nơi một làn sóng lăn qua tấm rồi tắt dần ("búng ra mượt") ---- */
+const PAD=1.32;
+const cv=document.getElementById('rmGL');
+let GLOK=true, renderer=null, tScene=null, tCam=null, uni=null;
+try{
+  renderer=new THREE.WebGLRenderer({canvas:cv,alpha:true,antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));
+  document.body.classList.add('hasgl');
+  tScene=new THREE.Scene();
+  tCam=new THREE.PerspectiveCamera(30,1,1,6000);
+  uni={u_time:{value:0},u_v:{value:new THREE.Vector2(0,0)},u_vs:{value:0},
+       u_dir:{value:new THREE.Vector2(1,0)},u_wob:{value:0},u_rot:{value:0},
+       u_j:{value:JELLY},u_wh:{value:new THREE.Vector2(100,100)},u_r:{value:20},
+       u_c1:{value:new THREE.Color('#D9CCFF')},u_c2:{value:new THREE.Color('#4416CC')}};
+  const mat=new THREE.ShaderMaterial({transparent:true,side:THREE.DoubleSide,uniforms:uni,
+    vertexShader:`
+      uniform vec2 u_v,u_dir; uniform float u_vs,u_wob,u_rot,u_time,u_j;
+      varying vec2 vUv;
+      void main(){
+        vUv=uv; vec3 p=position;          /* hộp -.5...5, mesh.scale phóng ra px */
+        vec2 q=uv-0.5;
+        float r2=dot(q,q)*4.0;            /* 0 tâm -> ~2 ở góc */
+        /* ① kéo lết theo vận tốc: nền nhẹ toàn tấm + góc trễ nặng */
+        p.xy-=u_v*(0.06+0.11*r2)*u_j;
+        /* ② phình gối theo tốc độ đổi cỡ: đẩy ra ở GIỮA MÉP, góc đứng yên */
+        p.x+=q.x*sin(3.14159*uv.y)*u_vs*0.10*u_j;
+        p.y+=q.y*sin(3.14159*uv.x)*u_vs*0.10*u_j;
+        /* ③ sóng đáp: lăn dọc hướng chạy cuối, biên độ u_wob (JS cho tắt dần) */
+        float ph=dot(q,u_dir)*6.28318;
+        p.xy+=u_dir*sin(ph-u_time*11.0)*u_wob*(0.012+0.030*r2)*u_j;
+        /* nghiêng nhẹ cả tấm theo vận tốc ngang */
+        float c=cos(u_rot),s=sin(u_rot);
+        p.xy=mat2(c,-s,s,c)*p.xy;
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.0);
+      }`,
+    fragmentShader:`
+      precision highp float;
+      uniform vec2 u_wh; uniform float u_time,u_r; uniform vec3 u_c1,u_c2; varying vec2 vUv;
+      vec3 grad(vec2 uv){
+        float t=u_time*0.12;
+        float m=0.5+0.5*sin((uv.x*1.6+uv.y*1.1)*3.14159+t*2.0+sin(uv.y*4.0+t)*0.6);
+        vec3 c=mix(u_c1,u_c2,m);
+        c+=0.05*sin(vec3(uv.x*8.0+t,uv.y*7.0-t,(uv.x+uv.y)*6.0+t));
+        return c;
+      }
+      float rrect(vec2 uv,vec2 wh,float r){
+        vec2 p=(uv-0.5)*wh; vec2 h=wh*0.5-vec2(r); vec2 d=abs(p)-h;
+        return length(max(d,0.0))+min(max(d.x,d.y),0.0)-r;
+      }
+      void main(){
+        vec3 col=grad(vUv);
+        float a=1.0-smoothstep(-1.5,1.5,rrect(vUv,u_wh,u_r));
+        gl_FragColor=vec4(col,a);
+      }`});
+  /* lưới 64x36 — biến dạng 2D mượt cần dày cả 2 chiều */
+  tScene.add(new THREE.Mesh(new THREE.PlaneGeometry(1,1,64,36),mat));
+  window.__mesh=tScene.children[0];
+}catch(e){ GLOK=false; console.warn('[gl] fallback phẳng:',e&&e.message); }
+
+let vh=innerHeight, R_sec=null, R_thumb=null, R_zone=null, R_max=null;
+function measure(){
+  vh=innerHeight;
+  const y=scrollY;
+  const a=about.getBoundingClientRect(), z=zone.getBoundingClientRect(), t=slot.getBoundingClientRect();
+  R_sec ={y:a.top+y, h:a.height};
+  R_zone={x:z.left, y:z.top+y, w:z.width, h:z.height};
+  R_thumb={x:t.left, y:t.top+y, w:t.width, h:t.height};
+  R_max={x:R_zone.x+R_zone.w*(1-MAXK)/2, y:R_zone.y+R_zone.h*(1-MAXK)/2,
+         w:R_zone.w*MAXK, h:R_zone.h*MAXK};
+  RS.init=false;
+  if(GLOK){
+    const W=R_zone.w*PAD, H=R_zone.h*PAD;
+    renderer.setSize(W,H,false);
+    tCam.aspect=W/H; tCam.position.set(0,0,(H/2)/Math.tan(THREE.MathUtils.degToRad(15)));
+    tCam.updateProjectionMatrix();
+    __mesh.scale.set(R_zone.w,R_zone.h,1);
+    uni.u_wh.value.set(R_zone.w,R_zone.h);
+  }
+}
+addEventListener('resize',measure);
+
+const RS={cx:0,cy:0,w:0,h:0,vx:0,vy:0,vw:0,vh:0,target:0,settled:false,init:false,popped:false};
+let smooth=scrollY, rprog=0, last=0, wob=0, sv=0, vx=0, vy=0, rot=0, prevE=0;
+
+function raf(now){
+  requestAnimationFrame(raf);
+  const dt=Math.min(.033,(now-last)/1000)||.016; last=now;
+  smooth=lerp(smooth,scrollY,.09);
+  if(Math.abs(smooth-scrollY)<.05) smooth=scrollY;
+  if(!R_zone) return;
+
+  /* ribbon vẽ suốt section — xuống vẽ tiếp, lên rút lại */
+  const raw=clamp((smooth+vh*.9-R_sec.y)/(R_sec.h*1.05),0,1);
+  rprog=lerp(rprog,raw,.12);
+  rrp.style.strokeDashoffset=(rlen*(1-rprog)).toFixed(1);
+
+  /* SCRUB THEO SCROLL: đích nội suy thumb->max theo tiến độ cuộn — dừng cuộn
+     giữa chừng là card KHỰNG đúng khấc đó (lò xo chỉ đáp mềm vào đích),
+     không còn cú bắn 2 trạng thái nên tốc độ phóng = tốc độ tay cuộn */
+  const centerLive=R_zone.y-smooth+R_zone.h/2;
+  const prog=clamp((vh*1.38-centerLive)/(vh*1.38-vh*0.42),0,1);   /* dải ~1 màn cuộn -> phóng chậm hơn */
+  const e=prog*prog*(3.0-2.0*prog);                               /* êm 2 đầu */
+  const T={x:lerp(R_thumb.x,R_max.x,e), y:lerp(R_thumb.y,R_max.y,e),
+           w:lerp(R_thumb.w,R_max.w,e), h:lerp(R_thumb.h,R_max.h,e)};
+  const tcx=T.x+T.w/2, tcy=T.y+T.h/2;
+  if(!RS.init){ RS.init=true; RS.cx=tcx;RS.cy=tcy;RS.w=T.w;RS.h=T.h; prevE=e; }
+  /* khấc 2 đầu: chạm hẳn 0/1 mới thả sóng đáp ("búng") */
+  if(e>.965&&prevE<=.965) wob=Math.max(wob,.9);
+  if(e<.035&&prevE>=.035) wob=Math.max(wob,.7);
+  prevE=e;
+  const kp=120, zp=.80, ks=110, zs=.78;                           /* mềm đều, không pop giữa đường */
+  let o;
+  o=spr(RS.cx,RS.vx,tcx,kp,zp,dt); RS.cx=o[0]; RS.vx=o[1];
+  o=spr(RS.cy,RS.vy,tcy,kp,zp,dt); RS.cy=o[0]; RS.vy=o[1];
+  o=spr(RS.w ,RS.vw,T.w,ks,zs,dt); RS.w =o[0]; RS.vw=o[1];
+  o=spr(RS.h ,RS.vh,T.h,ks,zs,dt); RS.h =o[0]; RS.vh=o[1];
+
+  const sx=RS.w/R_zone.w, sy=RS.h/R_zone.h;
+  morph.style.transform=
+    `translate3d(${((RS.cx-RS.w/2)-R_zone.x).toFixed(1)}px,${((RS.cy-RS.h/2)-R_zone.y).toFixed(1)}px,0) scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
+
+  const sp=clamp((RS.w-R_thumb.w)/Math.max(1,R_max.w-R_thumb.w),0,1);
+
+  if(GLOK){
+    /* thạch ăn theo vận tốc LÒ XO — không phải tiến độ — nên đứng yên là phẳng tuyệt đối */
+    const nvx=clamp(RS.vx/R_zone.w,-2.5,2.5), nvy=clamp(RS.vy/R_zone.w,-2.5,2.5);
+    vx=lerp(vx,nvx,.18); vy=lerp(vy,nvy,.18);
+    sv=lerp(sv,clamp(RS.vw/Math.max(1,RS.w),-3,3),.18);
+    const m=Math.hypot(vx,vy);
+    if(m>.12){ uni.u_dir.value.set(vx/m,vy/m); }        /* nhớ hướng chạy cuối cho sóng đáp */
+    wob*=Math.exp(-3.4*dt);
+    rot=lerp(rot,clamp(vx*.06,-.09,.09),.10);
+    uni.u_time.value=now*.001;
+    uni.u_v.value.set(vx,vy);
+    uni.u_vs.value=sv;
+    uni.u_wob.value=wob;
+    uni.u_rot.value=rot;
+    uni.u_r.value=20/Math.max(.001,sx);
+    renderer.render(tScene,tCam);
+  }
+
+  rmWords.style.opacity=(sp*1.4>1?1:sp*1.4).toFixed(3);
+  rmWords.style.setProperty('--rw',(22+sp*46).toFixed(0)+'px');
+  rmWords.style.setProperty('--gap',(10+sp*Math.max(0,R_zone.w*0.16)).toFixed(0)+'px');
+  rmWords.style.transform=`translateY(-50%) scale(${(1/Math.max(.001,sx)).toFixed(4)},${(1/Math.max(.001,sy)).toFixed(4)})`;
+  const on=e>.9&&Math.hypot(RS.vx,RS.vy)<12&&Math.abs(RS.vw)<12;
+  rmMarks.style.opacity=on?'1':'0';
+  const chip=on?54:0;
+  rmChip.style.width=rmChip.style.height=chip+'px';
+  rmChip.style.fontSize=(chip*0.34).toFixed(0)+'px';
+}
+measure();
+requestAnimationFrame(raf);
+addEventListener('load',()=>{ setTimeout(measure,60);
+  const s=parseFloat(Q.get('s')); if(s) scrollTo(0,s); });
+</script>
+</body>
+</html>

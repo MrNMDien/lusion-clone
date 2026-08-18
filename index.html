@@ -893,8 +893,9 @@ function raf(now){
 
   /* ---- ribbons: dashoffset scrubbed by section progress ---- */
   for(const rb of RIBBONS){
-    const raw=clamp((smooth+vh-rb.y)/(vh*0.85),0,1);
-    rb.p=lerp(rb.p,raw,.09);
+    /* scrub suot chieu dai section (user chot 18/08): xuong ve tiep, len RUT lai */
+    const raw=clamp((smooth+vh*0.9-rb.y)/(rb.h*1.05),0,1);
+    rb.p=lerp(rb.p,raw,.12);
     rb.path.style.strokeDashoffset=(rb.len*(1-rb.p)).toFixed(1);
   }
 
@@ -905,24 +906,25 @@ function raf(now){
       STMT_WORDS[i].style.opacity=(.12+clamp(prog*n*1.25-i,0,1)*.88).toFixed(3);
   }
 
-  /* ---- reel morph: two-state spring, simulated in DOC space ---- */
+  /* ---- reel morph: SCRUB theo scroll (user chot 18/08 tu preview-reel) ----
+     Dich noi suy thumb->max theo tien do cuon: DUNG TAY GIUA CHUNG LA CARD KHUNG
+     dung khac do; max = 80% zone (khong full nhu cu); lo xo mem deu chi lo phan
+     dap + nuoi jelly. Cham han 2 dau moi tha song "bung" (ripple GL san co). */
   if(R_zone && R_thumb){
+    const MAXK=0.8;
+    const R_max={x:R_zone.x+R_zone.w*(1-MAXK)/2, y:R_zone.y+R_zone.h*(1-MAXK)/2,
+                 w:R_zone.w*MAXK, h:R_zone.h*MAXK};
     const centerLive=R_zone.y-smooth+R_zone.h/2;
-    const p=clamp((vh*1.35-centerLive)/(vh*1.35-vh*0.5),0,1);
-    const want = p>0.5?1:(p<0.35?0:RS.target);          // hysteresis
-    if(want!==RS.target){ RS.target=want; RS.settled=false; RS.popped=false;
-      rmMarks.style.opacity='0'; }
-    const T = RS.target ? R_zone : R_thumb;
+    const prog=clamp((vh*1.38-centerLive)/(vh*1.38-vh*0.42),0,1);
+    const e=prog*prog*(3-2*prog);
+    const T={x:lerp(R_thumb.x,R_max.x,e), y:lerp(R_thumb.y,R_max.y,e),
+             w:lerp(R_thumb.w,R_max.w,e), h:lerp(R_thumb.h,R_max.h,e)};
     const tcx=T.x+T.w/2, tcy=T.y+T.h/2;
-    if(!RS.init){ RS.init=true; RS.cx=tcx;RS.cy=tcy;RS.w=T.w;RS.h=T.h; }
-    const nd=(Math.hypot(RS.cx-tcx,RS.cy-tcy)+Math.abs(RS.w-T.w))/Math.max(1,T.w);
-    const near=nd<0.15;
-    const kp=near?330:110, zp=near?0.9:0.72, ks=near?270:90, zs=near?0.70:0.68;
-    /* THE POP: stiffening alone cannot overshoot (k x3 raises w, higher z damps —
-       measured 0.00% at z=.9). Kick once on arrival; stiff spring absorbs it. */
-    if(near && !RS.popped){ RS.popped=true;
-      const dir=Math.sign(T.w-RS.w)||1;
-      RS.vw+=dir*T.w*2.4; RS.vh+=dir*T.h*2.4; }
+    if(!RS.init){ RS.init=true; RS.cx=tcx;RS.cy=tcy;RS.w=T.w;RS.h=T.h; RS.pe=e; }
+    if(e>.965&&RS.pe<=.965&&GL.reelRipple) GL.reelRipple();
+    if(e<.035&&RS.pe>=.035&&GL.reelRipple) GL.reelRipple();
+    RS.pe=e; RS.e=e;
+    const kp=120, zp=.80, ks=110, zs=.78;
     let o;
     o=spr(RS.cx,RS.vx,tcx,kp,zp,dt); RS.cx=o[0]; RS.vx=o[1];
     o=spr(RS.cy,RS.vy,tcy,kp,zp,dt); RS.cy=o[0]; RS.vy=o[1];
@@ -934,22 +936,21 @@ function raf(now){
       `translate3d(${((RS.cx-RS.w/2)-R_zone.x).toFixed(1)}px,${((RS.cy-RS.h/2)-R_zone.y).toFixed(1)}px,0) scale(${sx.toFixed(4)},${sy.toFixed(4)})`;
     reelMorph.style.borderRadius=`${(20/sx).toFixed(1)}px / ${(20/sy).toFixed(1)}px`;
 
-    /* size progress drives duotone + word spread */
-    const sp=clamp((RS.w-R_thumb.w)/Math.max(1,R_zone.w-R_thumb.w),0,1);
+    /* size progress drives duotone + word spread (chuan theo R_max, khong phai full zone) */
+    const sp=clamp((RS.w-R_thumb.w)/Math.max(1,R_max.w-R_thumb.w),0,1);
     RS.sizeP=sp;
     rmWords.style.opacity=(sp*1.4>1?1:sp*1.4).toFixed(3);
     rmWords.style.setProperty('--rw',(22+sp*46).toFixed(0)+'px');
     rmWords.style.setProperty('--gap',(10+sp*Math.max(0,R_zone.w*0.16)).toFixed(0)+'px');
     /* counter-scale words so they stay upright inside the scaled wrapper */
-    rmWords.style.transform=`translateY(-50%) scale(${(1/Math.max(.001,sx)).toFixed(4)},${(1/Math.max(.001,sy)).toFixed(4)})`;
-    const chip=(RS.settled&&RS.target===1)?54:0;
+    /* chu PLAY/REEL tre nhe theo van toc — chu song cung tam thach thay vi dan cung */
+    const wlx=clamp(-RS.vx*.012,-16,16), wly=clamp(-RS.vy*.012,-16,16);
+    rmWords.style.transform=`translate(${wlx.toFixed(1)}px,calc(-50% + ${wly.toFixed(1)}px)) scale(${(1/Math.max(.001,sx)).toFixed(4)},${(1/Math.max(.001,sy)).toFixed(4)})`;
+    const on=RS.e>.9&&Math.hypot(RS.vx,RS.vy)<12&&Math.abs(RS.vw)<12;
+    rmMarks.style.opacity=on?'1':'0';
+    const chip=on?54:0;
     rmChip.style.width=rmChip.style.height=chip+'px';
     rmChip.style.fontSize=(chip*0.34).toFixed(0)+'px';
-
-    if(!RS.settled && nd<0.005 && Math.hypot(RS.vx,RS.vy)<10 && Math.abs(RS.vw)<10){
-      RS.settled=true;
-      if(RS.target===1){ rmMarks.style.opacity='1'; if(GL.reelRipple) GL.reelRipple(); }
-    }
     if(GL.reelSync) GL.reelSync(RS,smooth,dt);
   }
 
