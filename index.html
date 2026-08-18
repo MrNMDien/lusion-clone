@@ -937,10 +937,13 @@ function raf(now){
      dap + nuoi jelly. Cham han 2 dau moi tha song "bung" (ripple GL san co). */
   if(R_zone && R_thumb){
     const MAXK=0.8;
-    const R_max={x:R_zone.x+R_zone.w*(1-MAXK)/2, y:R_zone.y+R_zone.h*(1-MAXK)/2,
+    /* neo card CAO hon trong zone (28% thay vi giua): luc full khong tho duoi fold */
+    const R_max={x:R_zone.x+R_zone.w*(1-MAXK)/2, y:R_zone.y+R_zone.h*(1-MAXK)*.28,
                  w:R_zone.w*MAXK, h:R_zone.h*MAXK};
     const centerLive=R_zone.y-smooth+R_zone.h/2;
-    const prog=clamp((vh*1.38-centerLive)/(vh*1.38-vh*0.42),0,1);
+    /* khac NGAN lai ~0.58 man cuon (truoc 0.96 — user che phai cuon nhieu qua),
+       va ket thuc som (centerLive 0.60vh) de card full nam TRON trong man */
+    const prog=clamp((vh*1.18-centerLive)/(vh*1.18-vh*0.60),0,1);
     const e=prog*prog*(3-2*prog);
     const T={x:lerp(R_thumb.x,R_max.x,e), y:lerp(R_thumb.y,R_max.y,e),
              w:lerp(R_thumb.w,R_max.w,e), h:lerp(R_thumb.h,R_max.h,e)};
