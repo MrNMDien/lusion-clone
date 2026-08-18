@@ -1178,7 +1178,7 @@ function fitBounds(aspect){
      front row pokes outside the visible frame. Fitting at zf makes the walls the frame
      edge for the closest bodies, so a flung jack always bounces IN VIEW. */
   const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-BOX.zf),
-        hw=hh*aspect, wall=hw+RJ*2.6;   /* tuong nam NGOAI mep khung: lua manh la vang khuat han */
+        hw=hh*aspect, wall=hw+RJ*2.0;   /* tuong nam NGOAI mep khung: lua manh la vang khuat han */
   if(Math.abs(wall-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
     BOX.hw=wall; BOX.vw=hw; BOX.hh=hh;
     /* the walls just moved: sleepers skip the wall clamp, so a resize would strand

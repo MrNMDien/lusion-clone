@@ -179,7 +179,7 @@ function respawn(j){
 }
 function fitBounds(aspect){
   const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-BOX.zf),
-        hw=hh*aspect, wall=hw+RJ*2.6;   /* twong nam NGOAI mep khung: lua manh la vang khuat han */
+        hw=hh*aspect, wall=hw+RJ*2.0;   /* twong nam NGOAI mep khung: lua manh la vang khuat han */
   if(Math.abs(wall-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
     BOX.hw=wall; BOX.vw=hw; BOX.hh=hh;
     if(BOX.spawned) jacks.forEach(wake);
