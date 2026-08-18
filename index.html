@@ -1106,10 +1106,10 @@ const kl2=new THREE.DirectionalLight(0xc2d2ff,2.8); kl2.position.set(-7, 4,-3); 
 const kl3=new THREE.DirectionalLight(0xffffff,1.8); kl3.position.set( 5,-2, 4); scene.add(kl3);
 const kl4=new THREE.DirectionalLight(0x8f7dff,1.3); kl4.position.set( 2, 3,-7); scene.add(kl4);
 
-const NJ=38;
+const NJ=18;
 /* Reference jacks are CYLINDER arms with a flat end face carrying a small dark bore
    (hollow-tube read), NOT capsules with plate caps. Arm stays ~3:1 half-length:radius. */
-const ARM_R=.35, ARM_HALF=1.05, HOLE_R=ARM_R*.36, HOLE_H=.03;
+const ARM_R=.63, ARM_HALF=1.89, HOLE_R=ARM_R*.36, HOLE_H=.03;  /* 1.8x — user chot 18/08 */
 const capGeo=new THREE.CylinderGeometry(ARM_R,ARM_R,ARM_HALF*2,20);
 const discGeo=new THREE.CylinderGeometry(HOLE_R,HOLE_R,HOLE_H,14);
 /* candy gloss: sharp clearcoat highlights, not the old matte read */
@@ -1120,6 +1120,9 @@ const discMat=new THREE.MeshPhysicalMaterial({color:0x0B0B10,roughness:.5,metaln
   clearcoat:.25,envMap:ENV,envMapIntensity:.2});
 const discIM=new THREE.InstancedMesh(discGeo,discMat,NJ*6);
 discIM.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+/* r158+: boundingSphere cua InstancedMesh tinh 1 lan o frame dau (bai spawn TREN khung)
+   roi dong bang -> than roi xuong panel la ca mesh bi cull mat mau. Body dong: tat cull. */
+discIM.frustumCulled=false;
 scene.add(discIM);
 
 /* local arm transforms: cylinder is Y-aligned by default */
@@ -1142,21 +1145,21 @@ const COLORS=[0x3623C8,0xF4F3F8,0x131318];
 /* ======== RIGID-BODY TOY PHYSICS (no spring-to-home, no float) ========
    Bounding-sphere bodies in a frustum-fitted box: gravity -> pile on the floor,
    cursor sweep plows them up, they tumble, rain back down, settle, sleep. */
-const RJ=1.00;                                  // collision sphere just under the arm reach
+const RJ=1.80, DROP=RJ*.85;   // collision sphere ~ arm reach; DROP: san tut xuong DUOI mep khung
 const G=-26, REST=.35, FLOOR_REST=.30, FRIC=.85, FLOOR_FRIC=.86,
-      /* STIR_MAX peaks the toss just under the (shorter) frame ceiling: 11^2/2G = 2.3u rise */
-      VMAX=60, STIR_MAX=11, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3,
+      /* sweep diu (user chot): STIR_MAX thap de lua = dat + lan; click van tung manh (CLICK_MAX) */
+      VMAX=60, STIR_MAX=7.5, CLICK_MAX=11, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3,
       /* These are fist-sized SOLID toys: high moment of inertia, so angular gains are
          small and hard-capped. WMAX 5 rad/s = 0.8 rev/s = 4.6 deg per 16ms frame.
          Damping is frame-rate independent: e^-kh, k=0.30 airborne (~.995/frame, tumble
          persists), k=6.3 in contact (~.90/frame, rolling friction calms the pile). */
       WMAX=5, W_AIR=.30, W_TOUCH=6.3;
-const BOX={hw:8,hh:4,zn:-2.8,zf:1.6,spawned:false};
+const BOX={hw:8,vw:8,hh:4,zn:-2.8,zf:1.6,spawned:false};
 const jacks=[];
 for(let i=0;i<NJ;i++) jacks.push({ci:i%3,
   pos:new THREE.Vector3(), vel:new THREE.Vector3(), spin:new THREE.Vector3(),
   q:new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.random()*6,Math.random()*6,Math.random()*6)),
-  s:1, sv:0, sc:0, t0:i*38, wait:true, sleep:false, still:0});
+  sc:0, t0:i*38, wait:true, sleep:false, still:0});
 
 const _e=new THREE.Euler(), _qs=new THREE.Quaternion();
 const wake=j=>{ j.sleep=false; j.still=0; };
@@ -1165,19 +1168,19 @@ function respawn(j){
   /* clear the frustum AT THIS DEPTH — the view is taller at the back, so a fixed spawn
      height pops far bodies into frame instead of raining them in from above */
   const top=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-z);
-  j.pos.set((Math.random()-.5)*BOX.hw*1.6, top+RJ+Math.random()*3, z);
+  j.pos.set((Math.random()-.5)*BOX.vw*1.6, top+RJ+Math.random()*3, z);
   j.vel.set(0,0,0);
   j.spin.set((Math.random()-.5)*2,(Math.random()-.5)*2,(Math.random()-.5)*2);
-  j.s=1; j.sv=0; wake(j);
+  wake(j);
 }
 function fitBounds(aspect){
   /* fit the frustum at the NEAREST body plane (z = zf), not at z=0: sized at z=0 the
      front row pokes outside the visible frame. Fitting at zf makes the walls the frame
      edge for the closest bodies, so a flung jack always bounces IN VIEW. */
   const hh=Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*(camera.position.z-BOX.zf),
-        hw=hh*aspect;
-  if(Math.abs(hw-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
-    BOX.hw=hw; BOX.hh=hh;
+        hw=hh*aspect, wall=hw+RJ*2.6;   /* tuong nam NGOAI mep khung: lua manh la vang khuat han */
+  if(Math.abs(wall-BOX.hw)>1e-3||Math.abs(hh-BOX.hh)>1e-3){
+    BOX.hw=wall; BOX.vw=hw; BOX.hh=hh;
     /* the walls just moved: sleepers skip the wall clamp, so a resize would strand
        them outside the new panel (scissored away = jacks vanish off the sides) */
     if(BOX.spawned) jacks.forEach(wake);
@@ -1206,14 +1209,13 @@ function stir(h){
     const inv=1/Math.max(.3,d), k=(1-d/R)*.55;
     const ox=j.vel.x, oy=j.vel.y, oz=j.vel.z;
     j.vel.x=lp(ox, ux*sp*.55+dx*inv*sp*.30, k);
-    j.vel.y=lp(oy, sp*.32   +dy*inv*sp*.15, k);   // <- the upward bias ("bới tung")
+    j.vel.y=lp(oy, sp*.15   +dy*inv*sp*.10, k);   // <- the upward bias ("bới tung"), da giam theo user
     j.vel.z=lp(oz, uz*sp*.35+dz*inv*sp*.30, k);
     if(j.vel.lengthSq()>STIR_MAX*STIR_MAX) j.vel.setLength(STIR_MAX);
     const vx=j.vel.x-ox, vy=j.vel.y-oy, vz=j.vel.z-oz;
     const dv=Math.hypot(vx,vy,vz);
     if(dv<.05) continue;                          // hovering must not wake the pile
     addSpin(j, dy*vz-dz*vy, dz*vx-dx*vz, dx*vy-dy*vx, Math.min(2.5,dv*.12), 2.5);
-    j.sv-=Math.min(.5,dv*.02);
     wake(j);
   }
 }
@@ -1233,7 +1235,7 @@ function addSpin(j,ax,ay,az,mag,cap){
 }
 
 function physSub(h){
-  const fy=-BOX.hh+RJ, wx=BOX.hw-RJ, D=RJ*2;
+  const fy=-BOX.hh+RJ-DROP, wx=BOX.hw-RJ, D=RJ*2;
   for(const j of jacks){
     if(j.wait||j.sleep) continue;
     j.touch=false;                     // set by floor/pair contact -> picks the damping rate
@@ -1241,7 +1243,7 @@ function physSub(h){
     if(j.vel.lengthSq()>VMAX*VMAX) j.vel.setLength(VMAX);
     j.pos.addScaledVector(j.vel,h);
   }
-  /* ponytail: O(n^2) broadphase — 28 bodies / 378 pairs, a grid would cost more than it saves */
+  /* ponytail: O(n^2) broadphase — 18 bodies / 153 pairs, a grid would cost more than it saves */
   for(let a=0;a<NJ;a++){
     const A=jacks[a]; if(A.wait) continue;
     for(let b=a+1;b<NJ;b++){
@@ -1280,8 +1282,6 @@ function physSub(h){
         if(wa){ A.vel.x+=tx*k; A.vel.y+=ty*k; A.vel.z+=tz*k; addSpin(A, cx, cy, cz, sw); }
         if(wc){ C.vel.x-=tx*k; C.vel.y-=ty*k; C.vel.z-=tz*k; addSpin(C,-cx,-cy,-cz, sw); }
       }
-      const sq=Math.min(.5,-vn*.045);
-      if(sq>.02){ if(wa)A.sv-=sq; if(wc)C.sv-=sq; }
     }
   }
   for(const j of jacks){
@@ -1296,7 +1296,6 @@ function physSub(h){
         const vy=-j.vel.y;
         j.vel.y = vy>REST_VN ? vy*FLOOR_REST : 0;
         j.vel.x*=FLOOR_FRIC; j.vel.z*=FLOOR_FRIC;
-        if(vy>1.5) j.sv-=Math.min(.6,vy*.04);
       }
     }
     if(j.pos.x> wx){ j.pos.x= wx; if(j.vel.x>0) j.vel.x*=-REST; }
@@ -1309,7 +1308,7 @@ function physSub(h){
     const slow=j.vel.lengthSq()<SLEEP_V*SLEEP_V;
     if(slow && j.spin.lengthSq()<SLEEP_W*SLEEP_W) j.still+=h;
     else j.still=0;
-    if(j.still>SLEEP_T){ j.sleep=true; j.vel.set(0,0,0); j.spin.set(0,0,0); j.s=1; j.sv=0; }
+    if(j.still>SLEEP_T){ j.sleep=true; j.vel.set(0,0,0); j.spin.set(0,0,0); }
   }
 }
 
@@ -1326,7 +1325,6 @@ function stepPhysics(dt,elapsed){
       _e.set(j.spin.x*D,j.spin.y*D,j.spin.z*D);
       _qs.setFromEuler(_e); j.q.multiply(_qs);
     }
-    j.sv+=(1-j.s)*14*D; j.sv*=.88; j.s+=j.sv*D; j.s=cl(j.s,.6,1.5);
   }
 }
 /* one InstancedMesh per colour: avoids instanceColor needing vertexColors,
@@ -1337,6 +1335,7 @@ const capIMs=groups.map((g,ci)=>{
   const mat=jackMat.clone(); mat.color=new THREE.Color(COLORS[ci]);
   const m=new THREE.InstancedMesh(capGeo,mat,Math.max(1,g.length*3));
   m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  m.frustumCulled=false;              /* cung ly do voi discIM */
   scene.add(m); return m;
 });
 
@@ -1366,11 +1365,11 @@ addEventListener('pointerdown',()=>{
     const f=(1-d/R)*12, inv=1/Math.max(.35,d);
     const ox=j.vel.x, oy=j.vel.y, oz=j.vel.z;
     j.vel.x+=dx*inv*f; j.vel.y+=dy*inv*f*.5+f*1.25; j.vel.z+=dz*inv*f*.7;
-    if(j.vel.lengthSq()>STIR_MAX*STIR_MAX) j.vel.setLength(STIR_MAX);  // same ceiling as the sweep
+    if(j.vel.lengthSq()>CLICK_MAX*CLICK_MAX) j.vel.setLength(CLICK_MAX);  // click tung manh hon sweep
     addSpin(j, dy*(j.vel.z-oz)-dz*(j.vel.y-oy),
                dz*(j.vel.x-ox)-dx*(j.vel.z-oz),
                dx*(j.vel.y-oy)-dy*(j.vel.x-ox), Math.min(2.5,f*.16), 2.5);
-    j.sv-=Math.min(.6,f*.05); wake(j);
+    wake(j);
   }
 });
 
@@ -1683,7 +1682,7 @@ GL.frame=(scrollY,now,heroVis,takeP,pvel,dt)=>{
     const slot=[0,0,0];
     for(let i=0;i<jacks.length;i++){
       const j=jacks[i], sc=Math.max(1e-4,j.sc);
-      _s.set(sc*j.s,sc*(2-j.s),sc*j.s);
+      _s.set(sc,sc,sc);                 /* uniform — bo squash, kich thuoc co dinh (user chot) */
       _t.compose(j.pos,j.q,_s);
       const im=capIMs[j.ci], base=slot[j.ci]*3; slot[j.ci]++;
       for(let a=0;a<3;a++){ _m.multiplyMatrices(_t,ARM[a]); im.setMatrixAt(base+a,_m); }
