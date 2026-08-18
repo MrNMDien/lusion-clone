@@ -1109,7 +1109,7 @@ const kl4=new THREE.DirectionalLight(0x8f7dff,1.3); kl4.position.set( 2, 3,-7); 
 const NJ=18;
 /* Reference jacks are CYLINDER arms with a flat end face carrying a small dark bore
    (hollow-tube read), NOT capsules with plate caps. Arm stays ~3:1 half-length:radius. */
-const ARM_R=.63, ARM_HALF=1.89, HOLE_R=ARM_R*.36, HOLE_H=.03;  /* 1.8x — user chot 18/08 */
+const ARM_R=.77, ARM_HALF=2.31, HOLE_R=ARM_R*.36, HOLE_H=.03;  /* 2.2x — user chot 18/08 */
 const capGeo=new THREE.CylinderGeometry(ARM_R,ARM_R,ARM_HALF*2,20);
 const discGeo=new THREE.CylinderGeometry(HOLE_R,HOLE_R,HOLE_H,14);
 /* candy gloss: sharp clearcoat highlights, not the old matte read */
@@ -1145,7 +1145,7 @@ const COLORS=[0x3623C8,0xF4F3F8,0x131318];
 /* ======== RIGID-BODY TOY PHYSICS (no spring-to-home, no float) ========
    Bounding-sphere bodies in a frustum-fitted box: gravity -> pile on the floor,
    cursor sweep plows them up, they tumble, rain back down, settle, sleep. */
-const RJ=1.80, DROP=RJ*.85;   // collision sphere ~ arm reach; DROP: san tut xuong DUOI mep khung
+const RJ=2.20, DROP=RJ*.85;   // collision sphere ~ arm reach; DROP: san tut xuong DUOI mep khung
 const G=-26, REST=.35, FLOOR_REST=.30, FRIC=.85, FLOOR_FRIC=.86,
       /* sweep diu (user chot): STIR_MAX thap de lua = dat + lan; click van tung manh (CLICK_MAX) */
       VMAX=60, STIR_MAX=7.5, CLICK_MAX=11, SLEEP_V=.45, SLEEP_W=1.0, SLEEP_T=.5, REST_VN=1.3,

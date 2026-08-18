@@ -55,9 +55,9 @@ body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",system-ui,s
 <div id="topbar">
   <span id="brand">LUSION</span>
   <div id="sizes">
-    <button data-k="1.4">Nhỏ</button>
-    <button data-k="1.6">Chuẩn</button>
-    <button data-k="1.8">Lớn</button>
+    <button data-k="1.8">Nhỏ</button>
+    <button data-k="2.2">Chuẩn</button>
+    <button data-k="2.6">Lớn</button>
   </div>
 </div>
 
@@ -82,7 +82,7 @@ body{background:var(--bg);color:var(--ink);font-family:"Inter Tight",system-ui,s
 
 <script>
 /* size switcher: reload với ?k= — đơn giản nhất, khỏi rebuild geometry sống */
-const K=parseFloat(new URLSearchParams(location.search).get('k'))||1.8;
+const K=parseFloat(new URLSearchParams(location.search).get('k'))||2.2;
 document.querySelectorAll('#sizes button').forEach(b=>{
   if(Math.abs(parseFloat(b.dataset.k)-K)<.01) b.classList.add('on');
   b.onclick=()=>location.search='?k='+b.dataset.k;
@@ -91,7 +91,7 @@ document.querySelectorAll('#sizes button').forEach(b=>{
 
 <script type="module">
 import * as THREE from 'three';
-const K=parseFloat(new URLSearchParams(location.search).get('k'))||1.8;
+const K=parseFloat(new URLSearchParams(location.search).get('k'))||2.2;
 const panel=document.getElementById('panel');
 const RMx=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cl=(v,a,b)=>v<a?a:v>b?b:v, lp=(a,b,t)=>a+(b-a)*t;
