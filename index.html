@@ -159,7 +159,10 @@ input{font:inherit}
 #heroFoot{display:flex;justify-content:center;padding:16px 0 40px;color:var(--ink-50)}
 
 /* ============ SCROLL-DRAWN RIBBONS ============ */
-.ribbon{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+/* ribbons o LOP RIENG z0 (duoi #glwrap z1): net + dau but chay PHIA DUOI card GL
+   (user chot 18/08). Nam trong #app (z2) thi z-index nao cung de len card. */
+#ribbonLayer{position:fixed;left:0;top:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.ribbon{position:absolute;left:0;top:0;pointer-events:none;overflow:visible;will-change:transform}
 .ribbon path{fill:none;stroke-width:14;stroke-linecap:round;stroke-linejoin:round}
 
 /* ============ LAYOUT ============ */
@@ -709,6 +712,12 @@ ribbon('ribbonA',0,
 /* B: two cyan strands weaving behind the statement heading */
 ribbon('ribbonB',0,'M -40 120 C 160 40 300 200 480 140 C 660 80 780 220 1040 130','#3FE0D0');
 ribbon('ribbonB',1,'M -40 250 C 200 340 320 180 520 260 C 720 340 860 200 1040 300','#3FE0D0');
+/* nhac svg ra lop z0: host van la section cu (measure van do theo no),
+   vi tri man hinh do transform trong raf lo */
+const ribbonLayer=document.createElement('div');
+ribbonLayer.id='ribbonLayer';
+document.body.insertBefore(ribbonLayer,document.getElementById('glwrap'));
+new Set(RIBBONS.map(r=>r.el)).forEach(el=>ribbonLayer.appendChild(el));
 
 /* =========================================================================
    MEASURED REGISTRY
@@ -746,6 +755,7 @@ function measure(){
   R_thumb={x:ts.left,y:ts.top,w:ts.width,h:ts.height};
   R_zone ={x:tz.left,y:tz.top,w:tz.width,h:tz.height};
   RIBBONS.forEach(r=>{ const b=r.host.getBoundingClientRect(); r.y=b.top; r.h=b.height;
+    r.x=b.left; r.el.style.width=b.width+'px'; r.el.style.height=b.height+'px';
     r.sx=Math.max(.01,b.width/r.vbw); r.sy=Math.max(.01,b.height/r.vbh); });
 
   app.style.transform=prev;
@@ -922,6 +932,7 @@ function raf(now){
     rb.tip.setAttribute('rx',((10+rbw*.4)/rb.sx).toFixed(2));
     rb.tip.setAttribute('ry',((10+rbw*.4)/rb.sy).toFixed(2));
     rb.tip.style.opacity=clamp(Math.min(rb.p,1-rb.p)*26,0,1).toFixed(2);
+    rb.el.style.transform=`translate3d(${rb.x}px,${(rb.y-smooth).toFixed(1)}px,0)`;
   }
 
   /* ---- statement scrub ---- */
